@@ -72,8 +72,8 @@ class GIN(nn.Module):
         self.to(self.device)
             
     def forward(self, x, rev=False):
-        x = self.net(x, rev=rev)
-        return x
+        x, logdet_J  = self.net(x, rev=rev)
+        return x, logdet_J 
     
     def train_model(self):
         os.makedirs(self.save_dir)
@@ -210,8 +210,7 @@ class GIN(nn.Module):
                 data, targ = next(examples)
                 data += torch.randn_like(data)*1e-2
                 self.eval()
-                latent_gpu = self(data.to(self.device))[0]
-                latent.append(latent_gpu.detach().cpu())
+                latent.append((self(data.to(self.device))[0]).detach().cpu())
                 target.append(targ)
             latent = torch.cat(latent, 0)
             target = torch.cat(target, 0)
