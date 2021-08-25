@@ -12,7 +12,7 @@ import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 
 class GIN(nn.Module):
-    def __init__(self, dataset, n_epochs, epochs_per_line, lr, lr_schedule, batch_size, save_frequency, incompressible_flow, empirical_vars, data_root_dir='./', n_classes=None, n_data_points=None, init_identity=True):
+    def __init__(self, dataset, n_epochs, epochs_per_line, lr, lr_schedule, batch_size, save_frequency, incompressible_flow, empirical_vars, unsupervised, data_root_dir='./', n_classes=None, n_data_points=None, init_identity=True):
         super().__init__()
         
         self.dataset = dataset
@@ -24,6 +24,7 @@ class GIN(nn.Module):
         self.save_frequency = min(save_frequency, n_epochs)
         self.incompressible_flow = bool(incompressible_flow)
         self.empirical_vars = bool(empirical_vars)
+        self.unsupervised = bool(unsupervised)
         self.init_identity = bool(init_identity)
         
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -42,6 +43,8 @@ class GIN(nn.Module):
                 raise RuntimeError('init_identity=False not implemented for EMNIST experiments')
             self.net = construct_net_emnist(coupling_block='gin' if self.incompressible_flow else 'glow')
             self.n_classes = 10
+            if unsupervised:
+                self.n_classes = n_classes
             self.n_dims = 28*28
             self.save_dir = os.path.join('./emnist_save/', self.timestamp)
             self.data_root_dir = data_root_dir
@@ -55,6 +58,15 @@ class GIN(nn.Module):
             self.log_sig = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
             # initialize these parameters to reasonable values
             self.set_mu_sig(init=True)
+        
+        if unsupervised:
+            self.pi_c = nn.Parameter(torch.ones(self.n_classes, device= self.device)/self.n_classes, requires_grad=True)
+            self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device= self.device) , requires_grad=True)
+            self.mu_c = nn.init.xavier_uniform_(self.mu_c)
+            self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device= self.device), requires_grad=True)
+            self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
+            self.std_c = torch.exp(0.5*self.logvar_c)
+
             
         
         self.to(self.device)
@@ -82,27 +94,42 @@ class GIN(nn.Module):
         for epoch in range(self.n_epochs):
             self.epoch = epoch
             for batch_idx, (data, target) in enumerate(self.train_loader):
-                if self.empirical_vars:
-                    # first check that std will be well defined
-                    if min([sum(target==i).item() for i in range(self.n_classes)]) < 2:
-                        # don't calculate loss and update weights -- it will give nan or error
-                        # go to next batch
-                        continue
-                optimizer.zero_grad()
-                data += torch.randn_like(data)*1e-2
-                data = data.to(self.device)
-                z = self.net(data)          # latent space variable
-                logdet_J = self.net.log_jacobian(run_forward=False)
-                if self.empirical_vars:
-                    # we only need to calculate the std
-                    sig = torch.stack([z[target==i].std(0, unbiased=False) for i in range(self.n_classes)])
-                    # negative log-likelihood for gaussian in latent space
-                    loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
+
+                if not self.unsupervised:
+                    if self.empirical_vars:
+                        # first check that std will be well defined
+                        if min([sum(target==i).item() for i in range(self.n_classes)]) < 2:
+                            # don't calculate loss and update weights -- it will give nan or error
+                            # go to next batch
+                            continue
+                    optimizer.zero_grad()
+                    data += torch.randn_like(data)*1e-2
+                    data = data.to(self.device)
+                    z, logdet_J = self.net(data)          # latent space variable
+                    if self.empirical_vars:
+                        # we only need to calculate the std
+                        sig = torch.stack([z[target==i].std(0, unbiased=False) for i in range(self.n_classes)])
+                        # negative log-likelihood for gaussian in latent space
+                        loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
+                    else:
+                        m = self.mu[target]
+                        ls = self.log_sig[target]
+                        # negative log-likelihood for gaussian in latent space
+                        loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
+
                 else:
-                    m = self.mu[target]
-                    ls = self.log_sig[target]
+                    optimizer.zero_grad()
+                    data += torch.randn_like(data)*1e-2
+                    data = data.to(self.device)
+                    z, logdet_J = self.net(data)          # latent space variable
+                    predicted_target = self.predict_y(z)
+                    mu = self.mu_c[predicted_target]
+                    logvar = self.logvar_c[predicted_target]
+                    pi = self.pi_c[predicted_target]
                     # negative log-likelihood for gaussian in latent space
-                    loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
+                    loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-logvar) + 0.5*logvar - torch.log(pi) , 1) + 0.5*np.log(2*np.pi)
+
+
                 loss -= logdet_J / self.n_dims
                 loss = loss.mean()
                 self.print_loss(loss.item(), batch_idx, epoch, t0)
@@ -117,6 +144,26 @@ class GIN(nn.Module):
             if (epoch+1)%self.save_frequency == 0:
                 self.save(os.path.join(self.save_dir, 'model_save', f'{epoch+1:03d}.pt'))
                 self.make_plots()
+    
+    def predict_class_probs(self, z):
+        ''' z: latent space batch '''
+
+        # ie, no 'VaDE' trick where we marginalise out y in the gen. model
+        pz_y = dist.Independent(dist.Normal(loc= self.mu_c,
+                                            scale= self.std_c),
+                                1)
+
+        z_pad = torch.unsqueeze(z, -2)
+        l_pz_y = pz_y.log_prob(z_pad)
+        l_p_y = torch.log_softmax(self.pi_c, dim=-1)
+
+        q_y_x = torch.softmax(l_pz_y + l_p_y, dim=1)
+        return q_y_x
+        
+    def predict_y(self, z):
+        ''' z: latent space batch '''
+        return np.argmax(self.predict_class_probs(z).cpu().detach().numpy(), 1)
+    
     
     def print_loss(self, loss, batch_idx, epoch, t0, new_line=False):
         n_batches = len(self.train_loader)
@@ -163,7 +210,8 @@ class GIN(nn.Module):
                 data, targ = next(examples)
                 data += torch.randn_like(data)*1e-2
                 self.eval()
-                latent.append(self(data.to(self.device)).detach().cpu())
+                latent_gpu = self(data.to(self.device))[0]
+                latent.append(latent_gpu.detach().cpu())
                 target.append(targ)
             latent = torch.cat(latent, 0)
             target = torch.cat(target, 0)

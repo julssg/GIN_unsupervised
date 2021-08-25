@@ -22,11 +22,15 @@ parser.add_argument('--incompressible_flow', type=int, default=1,
 parser.add_argument('--empirical_vars', type=int, default=1,
                     help='Estimate empirical variables (means and stds) for each batch (1, default) or learn them along \
                             with model weights (0)')
+parser.add_argument('--unsupervised', type=int, default=0,
+                    help='State whether model should be trained supervised (0, default) or unsupervised \
+                            with leared clustering in latent space (1)')
 parser.add_argument('--init_identity', type=int, default=1,
                     help='Initialize the network as the identity (1, default) or not (0)')
 args = parser.parse_args()
 assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'
 assert args.empirical_vars in [0,1], 'Argument should be 0 or 1'
+assert args.unsupervised in [0,1], 'Argument should be 0 or 1'
 assert args.init_identity in [0,1], 'Argument should be 0 or 1'
 
 model = GIN(dataset='10d', 
@@ -39,6 +43,7 @@ model = GIN(dataset='10d',
             batch_size=args.batch_size, 
             incompressible_flow=args.incompressible_flow, 
             empirical_vars=args.empirical_vars, 
+            unsupervised=args.unsupervised,
             init_identity=args.init_identity, 
             save_frequency=args.n_epochs)
 model.train_model()
