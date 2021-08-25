@@ -23,10 +23,16 @@ parser.add_argument('--incompressible_flow', type=int, default=1,
 parser.add_argument('--empirical_vars', type=int, default=1,
                     help='Estimate empirical variables (means and stds) for each batch (1, default) or learn them along \
                             with model weights (0)')
+parser.add_argument('--unsupervised', type=int, default=0,
+                    help='State whether model should be trained supervised (0, default) or unsupervised \
+                            with leared clustering in latent space (1)')
+parser.add_argument('--n_clusters', type=int, default=40,
+                    help='Number of components in gaussian mixture (default 5)')
 args = parser.parse_args()
 
 assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'
 assert args.empirical_vars in [0,1], 'Argument should be 0 or 1'
+assert args.unsupervised in [0,1], 'Argument should be 0 or 1'
 
 model = GIN(dataset='EMNIST', 
             n_epochs=args.n_epochs, 
@@ -37,7 +43,10 @@ model = GIN(dataset='EMNIST',
             save_frequency=args.save_frequency, 
             data_root_dir=args.data_root_dir, 
             incompressible_flow=args.incompressible_flow, 
-            empirical_vars=args.empirical_vars)
+            empirical_vars=args.empirical_vars,
+            unsupervised=args.unsupervised,
+            n_classes=args.n_clusters)
+
 model.train_model()
 
 
