@@ -27,7 +27,7 @@ parser.add_argument('--unsupervised', type=int, default=0,
                     help='State whether model should be trained supervised (0, default) or unsupervised \
                             with leared clustering in latent space (1)')
 parser.add_argument('--n_clusters', type=int, default=40,
-                    help='Number of components in gaussian mixture (default 5)')
+                    help='Number of components in gaussian mixture (default 40)')
 args = parser.parse_args()
 
 assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'

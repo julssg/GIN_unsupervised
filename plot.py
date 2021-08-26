@@ -67,7 +67,8 @@ def scale_ground_truth(y, x):
 
 def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1):
     """
-    Plots sampled digits. Each row contains all 10 digits with a consistent style
+    Plots sampled digits. Each row contains all 10 digits with a consistent style. 
+    In the case of unsupervised learning, all n_classes clusters in the latent space are recovered.
     """
     model.eval()
     fig = plt.figure(figsize=(10, n_rows))
@@ -80,9 +81,11 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
     # latent: (n_rows, n_classes, n_dims)
     latent = style_sample.unsqueeze(1)*model.sig.unsqueeze(0) + model.mu.unsqueeze(0)
     latent.detach_()
+    print(latent.size())
+    print(model.n_classes)
     # data: (n_rows, n_classes, 28, 28)
-    data = (model(latent.view(-1, 784), rev=True)[0]).detach().cpu().numpy().reshape(n_rows, 10, 28, 28)
-    im = data.transpose(0, 2, 1, 3).reshape(n_rows*28, 10*28)
+    data = (model(latent.view(-1, 784), rev=True)[0]).detach().cpu().numpy().reshape(n_rows, model.n_classes, 28, 28)
+    im = data.transpose(0, 2, 1, 3).reshape(n_rows*28, model.n_classes*28)
     plt.imshow(im, cmap='gray', vmin=0, vmax=1)
     plt.xticks([])
     plt.yticks([])
@@ -93,7 +96,8 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
 def emnist_plot_variation_along_dims(model, dims_to_plot):
     """
     Makes a plot for each of the given latent space dimensions. Each column contains all 10 digits
-    with a consistent style. Each row shows the effect of varying the latent space value of the 
+    with a consistent style. Or if unsupervised the clusters in the latent space are represented. 
+    Each row shows the effect of varying the latent space value of the 
     chosen dimension from -2 to +2 standard deviations while keeping the latent space
     values of all other dimensions constant at the mean value. The rightmost column shows a heatmap
     of the absolute pixel difference between the column corresponding to -1 std and +1 std
@@ -112,13 +116,13 @@ def emnist_plot_variation_along_dims(model, dims_to_plot):
         # latent: (n_classes, n_cols, n_dims)
         latent = style.unsqueeze(0)*model.sig.unsqueeze(1) + model.mu.unsqueeze(1)
         latent.detach_()
-        data = (model(latent.view(-1, 784), rev=True)[0]).detach().cpu().numpy().reshape(10, n_cols, 28, 28)
-        im = data.transpose(0, 2, 1, 3).reshape(10*28, n_cols*28)
+        data = (model(latent.view(-1, 784), rev=True)[0]).detach().cpu().numpy().reshape(model.n_classes, n_cols, 28, 28)
+        im = data.transpose(0, 2, 1, 3).reshape(model.n_classes*28, n_cols*28)
         # images at +1 and -1 std
         im_p1 = im[:, 28*2:28*3]
         im_m1 = im[:, 28*6:28*7]
         # full image with spacing between the two parts
-        im = np.concatenate([im, np.ones((10*28, 3)), np.abs(im_p1-im_m1)], axis=1)
+        im = np.concatenate([im, np.ones((model.n_classes*28, 3)), np.abs(im_p1-im_m1)], axis=1)
         plt.imshow(im, cmap='gray', vmin=0, vmax=1)
         plt.xticks([])
         plt.yticks([])

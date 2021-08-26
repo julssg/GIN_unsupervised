@@ -95,48 +95,49 @@ class GIN(nn.Module):
         for epoch in range(self.n_epochs):
             self.epoch = epoch
             for batch_idx, (data, target) in enumerate(self.train_loader):
+                if batch_idx < 999: 
+                    if not self.unsupervised:
+                        if self.empirical_vars:
+                            # first check that std will be well defined
+                            if min([sum(target==i).item() for i in range(self.n_classes)]) < 2:
+                                # don't calculate loss and update weights -- it will give nan or error
+                                # go to next batch
+                                continue
+                        optimizer.zero_grad()
+                        data += torch.randn_like(data)*1e-2
+                        data = data.to(self.device)
+                        z, logdet_J = self.net(data)          # latent space variable
+                        if self.empirical_vars:
+                            # we only need to calculate the std
+                            sig = torch.stack([z[target==i].std(0, unbiased=False) for i in range(self.n_classes)])
+                            # negative log-likelihood for gaussian in latent space
+                            loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
+                        else:
+                            m = self.mu[target]
+                            ls = self.log_sig[target]
+                            # negative log-likelihood for gaussian in latent space
+                            loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
 
-                if not self.unsupervised:
-                    if self.empirical_vars:
-                        # first check that std will be well defined
-                        if min([sum(target==i).item() for i in range(self.n_classes)]) < 2:
-                            # don't calculate loss and update weights -- it will give nan or error
-                            # go to next batch
-                            continue
-                    optimizer.zero_grad()
-                    data += torch.randn_like(data)*1e-2
-                    data = data.to(self.device)
-                    z, logdet_J = self.net(data)          # latent space variable
-                    if self.empirical_vars:
-                        # we only need to calculate the std
-                        sig = torch.stack([z[target==i].std(0, unbiased=False) for i in range(self.n_classes)])
-                        # negative log-likelihood for gaussian in latent space
-                        loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
                     else:
-                        m = self.mu[target]
-                        ls = self.log_sig[target]
+                        optimizer.zero_grad()
+                        data += torch.randn_like(data)*1e-2
+                        data = data.to(self.device)
+                        z, logdet_J = self.net(data)          # latent space variable
+                        predicted_target = self.predict_y(z)
+                        mu = self.mu_c[predicted_target]
+                        ls = self.std_c[predicted_target].log()
+                        pi = self.pi_c[predicted_target]
                         # negative log-likelihood for gaussian in latent space
-                        loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
-
-                else:
-                    optimizer.zero_grad()
-                    data += torch.randn_like(data)*1e-2
-                    data = data.to(self.device)
-                    z, logdet_J = self.net(data)          # latent space variable
-                    predicted_target = self.predict_y(z)
-                    mu = self.mu_c[predicted_target]
-                    logvar = self.logvar_c[predicted_target]
-                    pi = self.pi_c[predicted_target]
-                    # negative log-likelihood for gaussian in latent space
-                    loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-logvar) + 0.5*logvar , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
+                        loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-2*ls) + ls , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
 
 
-                loss -= logdet_J / self.n_dims
-                loss = loss.mean()
-                self.print_loss(loss.item(), batch_idx, epoch, t0)
-                losses.append(loss.item())
-                loss.backward(retain_graph=True)
-                optimizer.step()
+                    loss -= logdet_J / self.n_dims
+                    loss = loss.mean()
+                    self.print_loss(loss.item(), batch_idx, epoch, t0)
+                    losses.append(loss.item())
+                    loss.backward(retain_graph=True)
+                    optimizer.step()
+
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)
                 self.print_loss(avg_loss, batch_idx, epoch, t0, new_line=True)
@@ -198,32 +199,38 @@ class GIN(nn.Module):
             top_sig_dims = np.flip(np.argsort(sig_rms))
             dims_to_plot = top_sig_dims[:n_dims_to_plot]
             emnist_plot_variation_along_dims(self, dims_to_plot)
+
+
         else:
             raise RuntimeError("Check dataset name. Doesn't match.")
     
     def set_mu_sig(self, init=False, n_batches=40):
-        if self.empirical_vars or init:
-            examples = iter(self.test_loader)
-            n_batches = min(n_batches, len(examples))
-            latent = []
-            target = []
-            for _ in range(n_batches):
-                data, targ = next(examples)
-                data += torch.randn_like(data)*1e-2
-                self.eval()
-                latent.append((self(data.to(self.device))[0]).detach().cpu())
-                target.append(targ)
-            latent = torch.cat(latent, 0)
-            target = torch.cat(target, 0)
-        if self.empirical_vars:
-            self.mu = torch.stack([latent[target == i].mean(0) for i in range(10)]).to(self.device)
-            self.sig = torch.stack([latent[target == i].std(0) for i in range(10)]).to(self.device)
-        else:
-            if init:
-                self.mu.data = torch.stack([latent[target == i].mean(0) for i in range(10)])
-                self.log_sig.data = torch.stack([latent[target == i].std(0) for i in range(10)]).log()
+        if not self.unsupervised:
+            if self.empirical_vars or init:
+                examples = iter(self.test_loader)
+                n_batches = min(n_batches, len(examples))
+                latent = []
+                target = []
+                for _ in range(n_batches):
+                    data, targ = next(examples)
+                    data += torch.randn_like(data)*1e-2
+                    self.eval()
+                    latent.append((self(data.to(self.device))[0]).detach().cpu())
+                    target.append(targ)
+                latent = torch.cat(latent, 0)
+                target = torch.cat(target, 0)
+            if self.empirical_vars:
+                self.mu = torch.stack([latent[target == i].mean(0) for i in range(10)]).to(self.device)
+                self.sig = torch.stack([latent[target == i].std(0) for i in range(10)]).to(self.device)
             else:
-                self.sig = self.log_sig.exp().detach()
+                if init:
+                    self.mu.data = torch.stack([latent[target == i].mean(0) for i in range(10)])
+                    self.log_sig.data = torch.stack([latent[target == i].std(0) for i in range(10)]).log()
+                else:
+                    self.sig = self.log_sig.exp().detach()
+        else:
+            self.mu = self.mu_c
+            self.sig = self.std_c 
 
 
 
