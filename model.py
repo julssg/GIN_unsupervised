@@ -4,6 +4,7 @@ import numpy as np
 from time import time
 import os
 from collections import OrderedDict
+import torch.distributions as dist 
 
 from data import make_dataloader, make_dataloader_emnist
 from plot import artificial_data_reconstruction_plot, emnist_plot_samples, emnist_plot_spectrum, emnist_plot_variation_along_dims
@@ -127,7 +128,7 @@ class GIN(nn.Module):
                     logvar = self.logvar_c[predicted_target]
                     pi = self.pi_c[predicted_target]
                     # negative log-likelihood for gaussian in latent space
-                    loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-logvar) + 0.5*logvar - torch.log(pi) , 1) + 0.5*np.log(2*np.pi)
+                    loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-logvar) + 0.5*logvar , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
 
 
                 loss -= logdet_J / self.n_dims
