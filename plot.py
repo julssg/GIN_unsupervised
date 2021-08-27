@@ -1,9 +1,12 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from time import time
 import os
+
+matplotlib.use("Agg")
 
 def artificial_data_reconstruction_plot(model, latent, data, target):
     """
@@ -76,7 +79,7 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
     style_sample = torch.zeros(n_rows, 784)
     style_sample[:,dims_to_sample] = torch.randn(n_rows, n_dims_to_sample)*temp
     style_sample = style_sample.to(model.device)
-    single_sample = torch.randn(1, 784).to(model.device)
+    # single_sample = torch.randn(1, 784).to(model.device)
 
     # style sample: (n_rows, n_dims)
     # mu,sig: (n_classes, n_dims)
@@ -84,16 +87,16 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
     latent = style_sample.unsqueeze(1)*model.sig.unsqueeze(0) + model.mu.unsqueeze(0)
     latent.detach_()
 
-    latent_single = single_sample.unsqueeze(1)*model.sig.unsqueeze(0) + model.mu.unsqueeze(0)
-    latent_single.detach()
+    # latent_single = single_sample.unsqueeze(1)*model.sig.unsqueeze(0) + model.mu.unsqueeze(0)
+    # latent_single.detach()
 
-    print(latent_single.size())
-    im = model(latent_single.view(-1, 784), rev=True)[0].detach().cpu().numpy().reshape(model.n_classes, 28, 28)
-    plt.imshow(im[3], cmap='gray', vmin=0, vmax=1)
-    plt.xticks([])
-    plt.yticks([])
-    plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'single_samples.png'), bbox_inches='tight', pad_inches=0.5)
-    plt.close()
+    # print(latent_single.size())
+    # im = model(latent_single.view(-1, 784), rev=True)[0].detach().cpu().numpy().reshape(model.n_classes, 28, 28)
+    # plt.imshow(im[3], cmap='gray', vmin=0, vmax=1)
+    # plt.xticks([])
+    # plt.yticks([])
+    # plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'single_samples.png'), bbox_inches='tight', pad_inches=0.5)
+    # plt.close()
 
     # data: (n_rows, n_classes, 28, 28)
     data = (model(latent.view(-1, 784), rev=True)[0]).detach().cpu().numpy().reshape(n_rows, model.n_classes, 28, 28)
@@ -103,6 +106,8 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
     plt.yticks([])
     plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'samples.png'), bbox_inches='tight', pad_inches=0.5)
     plt.close()
+
+    fig.clear()
 
 
 def emnist_plot_variation_along_dims(model, dims_to_plot):
@@ -141,6 +146,8 @@ def emnist_plot_variation_along_dims(model, dims_to_plot):
         plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'variation_plots', f'variable_{i+1:03d}.png'), 
                     bbox_inches='tight', pad_inches=0.5)
         plt.close()
+
+        fig.clear()
 
 
 def emnist_plot_spectrum(model, sig_rms):
