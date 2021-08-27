@@ -76,13 +76,25 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
     style_sample = torch.zeros(n_rows, 784)
     style_sample[:,dims_to_sample] = torch.randn(n_rows, n_dims_to_sample)*temp
     style_sample = style_sample.to(model.device)
+    single_sample = torch.randn(1, 784).to(model.device)
+
     # style sample: (n_rows, n_dims)
     # mu,sig: (n_classes, n_dims)
     # latent: (n_rows, n_classes, n_dims)
     latent = style_sample.unsqueeze(1)*model.sig.unsqueeze(0) + model.mu.unsqueeze(0)
     latent.detach_()
-    print(latent.size())
-    print(model.n_classes)
+
+    latent_single = single_sample.unsqueeze(1)*model.sig.unsqueeze(0) + model.mu.unsqueeze(0)
+    latent_single.detach()
+
+    print(latent_single.size())
+    im = model(latent_single.view(-1, 784), rev=True)[0].detach().cpu().numpy().reshape(model.n_classes, 28, 28)
+    plt.imshow(im[3], cmap='gray', vmin=0, vmax=1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'single_samples.png'), bbox_inches='tight', pad_inches=0.5)
+    plt.close()
+
     # data: (n_rows, n_classes, 28, 28)
     data = (model(latent.view(-1, 784), rev=True)[0]).detach().cpu().numpy().reshape(n_rows, model.n_classes, 28, 28)
     im = data.transpose(0, 2, 1, 3).reshape(n_rows*28, model.n_classes*28)

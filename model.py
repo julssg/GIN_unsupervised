@@ -8,6 +8,7 @@ import torch.distributions as dist
 
 from data import make_dataloader, make_dataloader_emnist
 from plot import artificial_data_reconstruction_plot, emnist_plot_samples, emnist_plot_spectrum, emnist_plot_variation_along_dims
+from distributions import MixtureSameFamily
 
 import FrEIA.framework as Ff
 import FrEIA.modules as Fm
@@ -61,12 +62,12 @@ class GIN(nn.Module):
             self.set_mu_sig(init=True)
         
         if unsupervised:
-            self.pi_c = nn.Parameter(torch.ones(self.n_classes, device= self.device)/self.n_classes, requires_grad=True)
-            self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device= self.device) , requires_grad=True)
+            self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+            self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
             self.mu_c = nn.init.xavier_uniform_(self.mu_c)
-            self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device= self.device), requires_grad=True)
+            self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
             self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
-            self.std_c = torch.exp(0.5*self.logvar_c)
+            # self.std_c = torch.exp(0.5*self.logvar_c)
 
             
         
@@ -123,19 +124,30 @@ class GIN(nn.Module):
                         data += torch.randn_like(data)*1e-2
                         data = data.to(self.device)
                         z, logdet_J = self.net(data)          # latent space variable
-                        predicted_target = self.predict_y(z)
-                        mu = self.mu_c[predicted_target]
-                        ls = self.std_c[predicted_target].log()
-                        pi = self.pi_c[predicted_target]
-                        # negative log-likelihood for gaussian in latent space
-                        loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-2*ls) + ls , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
 
+                        # implemennt p(z) as in i dont need u, as mixture model:
+                        
+                        loss = - self.log_likelihood_latent_space(z)
+                        print("negative loglikelihood: ", - self.log_likelihood_latent_space(z) )
+                        # predicted_target = self.predict_y(z)
+                        # mu = self.mu_c[predicted_target]
+                        # ls = self.std_c[predicted_target].log()
+                        # pi = self.pi_c[predicted_target]
+                        # # negative log-likelihood for gaussian in latent space
+                        # loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-2*ls) + ls , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
 
-                    loss -= logdet_J / self.n_dims
+                        if batch_idx%500 == 0:
+                            print('predicted probs:', self.predict_class_probs(z))
+                            print("mu:", self.mu_c)
+                            print("log var:", self.logvar_c)
+                            print("pi:", self.pi_c)
+                    
+                    print("norm logdet:", logdet_J )
+                    loss -= logdet_J  / self.n_dims
                     loss = loss.mean()
                     self.print_loss(loss.item(), batch_idx, epoch, t0)
                     losses.append(loss.item())
-                    loss.backward(retain_graph=True)
+                    loss.backward() #retain_graph=True
                     optimizer.step()
 
             if (epoch+1)%self.epochs_per_line == 0:
@@ -147,25 +159,40 @@ class GIN(nn.Module):
                 self.save(os.path.join(self.save_dir, 'model_save', f'{epoch+1:03d}.pt'))
                 self.make_plots()
     
+
+    def log_likelihood_latent_space(self, z):
+
+        pz_y = dist.Independent(dist.Normal(loc=self.mu_c,
+                                                scale=torch.exp(0.5 * self.logvar_c)),
+                                    1)
+        p_y = dist.Categorical(logits=self.pi_c)
+        p_z = MixtureSameFamily(p_y, pz_y)
+
+
+        # loglikelihood in latent space
+        log_prob_pz = p_z.log_prob(z)
+
+        return log_prob_pz/self.n_dims
+
+
     def predict_class_probs(self, z):
         ''' z: latent space batch '''
 
         # ie, no 'VaDE' trick where we marginalise out y in the gen. model
-        pz_y = dist.Independent(dist.Normal(loc= self.mu_c,
-                                            scale= self.std_c),
+        pz_y = dist.Independent(dist.Normal(loc=self.mu_c,
+                                            scale=torch.exp(0.5 * self.logvar_c)),
                                 1)
 
         z_pad = torch.unsqueeze(z, -2)
         l_pz_y = pz_y.log_prob(z_pad)
         l_p_y = torch.log_softmax(self.pi_c, dim=-1)
-
-        q_y_x = torch.softmax(l_pz_y + l_p_y, dim=1)
+        l_q_y_x = l_pz_y + l_p_y
+        q_y_x = torch.softmax(l_q_y_x, dim=1)
         return q_y_x
         
     def predict_y(self, z):
         ''' z: latent space batch '''
-        return np.argmax(self.predict_class_probs(z).cpu().detach().numpy(), 1)
-    
+        return np.argmax((self.predict_class_probs(z)).cpu().detach().numpy(), 1)
     
     def print_loss(self, loss, batch_idx, epoch, t0, new_line=False):
         n_batches = len(self.train_loader)
@@ -199,8 +226,6 @@ class GIN(nn.Module):
             top_sig_dims = np.flip(np.argsort(sig_rms))
             dims_to_plot = top_sig_dims[:n_dims_to_plot]
             emnist_plot_variation_along_dims(self, dims_to_plot)
-
-
         else:
             raise RuntimeError("Check dataset name. Doesn't match.")
     
@@ -229,8 +254,8 @@ class GIN(nn.Module):
                 else:
                     self.sig = self.log_sig.exp().detach()
         else:
-            self.mu = self.mu_c
-            self.sig = self.std_c 
+            self.mu = self.mu_c.detach()
+            self.sig = torch.exp(0.5 * self.logvar_c).detach()
 
 
 
