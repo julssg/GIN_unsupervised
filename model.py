@@ -142,13 +142,13 @@ class GIN(nn.Module):
                             print("log var:", self.logvar_c)
                             print("pi:", self.pi_c)
                     
-                    print("norm logdet:", logdet_J )
                     loss -= logdet_J  / self.n_dims
                     loss = loss.mean()
                     self.print_loss(loss.item(), batch_idx, epoch, t0)
                     losses.append(loss.item())
-                    loss.backward() #retain_graph=True
+                    loss.backward(retain_graph=True) #retain_graph=True
                     optimizer.step()
+            print("norm logdet:", logdet_J )
 
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)
