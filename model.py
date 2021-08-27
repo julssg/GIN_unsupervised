@@ -126,9 +126,9 @@ class GIN(nn.Module):
                         z, logdet_J = self.net(data)          # latent space variable
 
                         # implemennt p(z) as in i dont need u, as mixture model:
-                        
+
                         loss = - self.log_likelihood_latent_space(z)
-                        print("negative loglikelihood: ", - self.log_likelihood_latent_space(z) )
+                        
                         # predicted_target = self.predict_y(z)
                         # mu = self.mu_c[predicted_target]
                         # ls = self.std_c[predicted_target].log()
@@ -142,13 +142,12 @@ class GIN(nn.Module):
                             print("log var:", self.logvar_c)
                             print("pi:", self.pi_c)
                     
-                    loss -= logdet_J  / self.n_dims
+                    loss -= logdet_J  / self.n_dims  # is zero in GIN 
                     loss = loss.mean()
                     self.print_loss(loss.item(), batch_idx, epoch, t0)
                     losses.append(loss.item())
                     loss.backward(retain_graph=True) #retain_graph=True
                     optimizer.step()
-            print("norm logdet:", logdet_J )
 
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)
@@ -162,9 +161,7 @@ class GIN(nn.Module):
 
     def log_likelihood_latent_space(self, z):
 
-        pz_y = dist.Independent(dist.Normal(loc=self.mu_c,
-                                                scale=torch.exp(0.5 * self.logvar_c)),
-                                    1)
+        pz_y = dist.Independent(dist.Normal(loc=self.mu_c, scale=torch.exp(0.5 * self.logvar_c)),1)
         p_y = dist.Categorical(logits=self.pi_c)
         p_z = MixtureSameFamily(p_y, pz_y)
 
