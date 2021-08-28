@@ -68,8 +68,6 @@ class GIN(nn.Module):
             self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
             self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
             # self.std_c = torch.exp(0.5*self.logvar_c)
-
-            
         
         self.to(self.device)
             
@@ -159,12 +157,10 @@ class GIN(nn.Module):
         p_y = dist.Categorical(logits=self.pi_c)
         p_z = MixtureSameFamily(p_y, pz_y)
 
-
         # loglikelihood in latent space
         log_prob_pz = p_z.log_prob(z)
 
         return log_prob_pz/self.n_dims
-
 
     def predict_class_probs(self, z):
         ''' z: latent space batch '''
