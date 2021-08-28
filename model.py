@@ -128,19 +128,13 @@ class GIN(nn.Module):
                         # implemennt p(z) as in i dont need u, as mixture model:
 
                         loss = - self.log_likelihood_latent_space(z)
-                        
+
                         # predicted_target = self.predict_y(z)
                         # mu = self.mu_c[predicted_target]
                         # ls = self.std_c[predicted_target].log()
                         # pi = self.pi_c[predicted_target]
                         # # negative log-likelihood for gaussian in latent space
                         # loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-2*ls) + ls , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
-
-                        if batch_idx%500 == 0:
-                            print('predicted probs:', self.predict_class_probs(z))
-                            print("mu:", self.mu_c)
-                            print("log var:", self.logvar_c)
-                            print("pi:", self.pi_c)
                     
                     loss -= logdet_J  / self.n_dims  # is zero in GIN 
                     loss = loss.mean()
