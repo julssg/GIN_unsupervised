@@ -62,11 +62,13 @@ class GIN(nn.Module):
             self.set_mu_sig(init=True)
         
         if unsupervised:
-            self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+            # self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+            self.pi_c = nn.Parameter(torch.zeros(self.n_classes, device=self.device), requires_grad=True)
             self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
             self.mu_c = nn.init.xavier_uniform_(self.mu_c)
             self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
             self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
+            self.set_mu_sig(init=True)    # test init first 10 clusters with real mu and sigma
             # self.std_c = torch.exp(0.5*self.logvar_c)
         
         self.to(self.device)
@@ -140,6 +142,11 @@ class GIN(nn.Module):
                     losses.append(loss.item())
                     loss.backward(retain_graph=True) #retain_graph=True
                     optimizer.step()
+
+            if epoch%2 == 0:
+                print("logvar" , self.logvar_c)
+                print("mu" , self.mu_c)
+                print("pi" , self.pi_c)
 
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)
@@ -217,20 +224,21 @@ class GIN(nn.Module):
             raise RuntimeError("Check dataset name. Doesn't match.")
     
     def set_mu_sig(self, init=False, n_batches=40):
+        
+        if self.empirical_vars or init:
+            examples = iter(self.test_loader)
+            n_batches = min(n_batches, len(examples))
+            latent = []
+            target = []
+            for _ in range(n_batches):
+                data, targ = next(examples)
+                data += torch.randn_like(data)*1e-2
+                self.eval()
+                latent.append((self(data)[0]).detach().cpu())
+                target.append(targ)
+            latent = torch.cat(latent, 0)
+            target = torch.cat(target, 0)
         if not self.unsupervised:
-            if self.empirical_vars or init:
-                examples = iter(self.test_loader)
-                n_batches = min(n_batches, len(examples))
-                latent = []
-                target = []
-                for _ in range(n_batches):
-                    data, targ = next(examples)
-                    data += torch.randn_like(data)*1e-2
-                    self.eval()
-                    latent.append((self(data.to(self.device))[0]).detach().cpu())
-                    target.append(targ)
-                latent = torch.cat(latent, 0)
-                target = torch.cat(target, 0)
             if self.empirical_vars:
                 self.mu = torch.stack([latent[target == i].mean(0) for i in range(10)]).to(self.device)
                 self.sig = torch.stack([latent[target == i].std(0) for i in range(10)]).to(self.device)
@@ -240,9 +248,15 @@ class GIN(nn.Module):
                     self.log_sig.data = torch.stack([latent[target == i].std(0) for i in range(10)]).log()
                 else:
                     self.sig = self.log_sig.exp().detach()
-        else:
-            self.mu = self.mu_c.detach()
-            self.sig = torch.exp(0.5 * self.logvar_c).detach()
+        if self.unsupervised:
+            if init:
+                for i in range(10):
+                    self.mu_c.data[i] = latent[target == i].mean(0)
+                    self.logvar_c.data[i] = torch.log(latent[target == i].std(0)**2)
+                    self.pi_c.data[i] = 1/10
+            else:
+                self.mu = self.mu_c.detach()
+                self.sig = torch.exp(0.5 * self.logvar_c).detach()
 
 
 
