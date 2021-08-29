@@ -62,13 +62,18 @@ class GIN(nn.Module):
             self.set_mu_sig(init=True)
         
         if unsupervised:
-            # self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
-            self.pi_c = nn.Parameter(torch.zeros(self.n_classes, device=self.device), requires_grad=True)
+            # self.mu = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+            # self.log_sig = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+
+            self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+
+            # self.pi_c = nn.Parameter(torch.zeros(self.n_classes, device=self.device), requires_grad=False)
             self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
             self.mu_c = nn.init.xavier_uniform_(self.mu_c)
             self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
             self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
-            self.set_mu_sig(init=True)    # test init first 10 clusters with real mu and sigma
+
+            # self.set_mu_sig(init=True)    # test init first 10 clusters with real mu and sigma
             # self.std_c = torch.exp(0.5*self.logvar_c)
         
         self.to(self.device)
@@ -96,7 +101,7 @@ class GIN(nn.Module):
         for epoch in range(self.n_epochs):
             self.epoch = epoch
             for batch_idx, (data, target) in enumerate(self.train_loader):
-                if batch_idx < 999: 
+                if batch_idx < 59: 
                     if not self.unsupervised:
                         if self.empirical_vars:
                             # first check that std will be well defined
@@ -127,14 +132,24 @@ class GIN(nn.Module):
 
                         # implemennt p(z) as in i dont need u, as mixture model:
 
-                        loss = - self.log_likelihood_latent_space(z)
+                        # loss = - self.log_likelihood_latent_space(z)
 
-                        # predicted_target = self.predict_y(z)
-                        # mu = self.mu_c[predicted_target]
-                        # ls = self.std_c[predicted_target].log()
-                        # pi = self.pi_c[predicted_target]
-                        # # negative log-likelihood for gaussian in latent space
-                        # loss = torch.mean(0.5*(z-mu)**2 * torch.exp(-2*ls) + ls , 1) - torch.log(pi) + 0.5*np.log(2*np.pi)
+                        predicted_prob = self.predict_class_probs(z).unsqueeze(2)
+                        mu = self.mu_c.unsqueeze(0)
+                        var = self.logvar_c.exp().unsqueeze(0)
+                        pi = torch.log_softmax(self.pi_c, dim=-1).exp().unsqueeze(1).unsqueeze(0)
+
+                        # print(mu.size(), var.size(), z.size(), pi.size(), predicted_prob.size())
+
+                        loss = pi/np.sqrt(2*np.pi) * 1/torch.sqrt(var) * torch.exp(- 0.5*(z.unsqueeze(1)-mu)**2/torch.exp(var))
+
+                        # do loss like N(mu_k, sig_k)/ sum(N(mu_i,sig_i))
+                        # print(loss.size()) # batch, N_clusters, n_dim
+                        loss = torch.sum(loss, 1)
+                        # print(loss.size()) # batch, n_dim
+                        loss = - torch.mean(predicted_prob*loss.log(), 1)
+                        # print(loss.size()) # Batch
+                        # loss = torch.mean(0.5*(z-self.mu)**2 * torch.exp(self.logvar_c) + 0.5*self.logvar_c , 1) - torch.log(self.pi_c) + 0.5*np.log(2*np.pi)
                     
                     loss -= logdet_J  / self.n_dims  # is zero in GIN 
                     loss = loss.mean()
@@ -143,7 +158,9 @@ class GIN(nn.Module):
                     loss.backward(retain_graph=True) #retain_graph=True
                     optimizer.step()
 
-            if epoch%2 == 0:
+            if epoch%1 == 0:
+                print("predicted prob ", predicted_prob)
+                print("predicted target", self.predict_y(z))
                 print("logvar" , self.logvar_c)
                 print("mu" , self.mu_c)
                 print("pi" , self.pi_c)
@@ -233,8 +250,9 @@ class GIN(nn.Module):
             for _ in range(n_batches):
                 data, targ = next(examples)
                 data += torch.randn_like(data)*1e-2
+                self.to(self.device)
                 self.eval()
-                latent.append((self(data)[0]).detach().cpu())
+                latent.append((self(data.to(self.device))[0]).detach().cpu())
                 target.append(targ)
             latent = torch.cat(latent, 0)
             target = torch.cat(target, 0)
