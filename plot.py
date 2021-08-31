@@ -106,7 +106,6 @@ def emnist_plot_samples(model, n_rows, dims_to_sample=torch.arange(784), temp=1)
     plt.yticks([])
     plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'samples.png'), bbox_inches='tight', pad_inches=0.5)
     plt.close()
-
     fig.clear()
 
 

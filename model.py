@@ -101,7 +101,7 @@ class GIN(nn.Module):
         for epoch in range(self.n_epochs):
             self.epoch = epoch
             for batch_idx, (data, target) in enumerate(self.train_loader):
-                if batch_idx < 59: 
+                if batch_idx < 999: 
                     if not self.unsupervised:
                         if self.empirical_vars:
                             # first check that std will be well defined
@@ -119,7 +119,7 @@ class GIN(nn.Module):
                             # negative log-likelihood for gaussian in latent space
                             loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
                         else:
-                            m = self.mu[target]
+                            m = self.mu[target] 
                             ls = self.log_sig[target]
                             # negative log-likelihood for gaussian in latent space
                             loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
@@ -130,25 +130,29 @@ class GIN(nn.Module):
                         data = data.to(self.device)
                         z, logdet_J = self.net(data)          # latent space variable
 
-                        # implemennt p(z) as in i dont need u, as mixture model:
+                        # Different implementations of loss:
 
-                        # loss = - self.log_likelihood_latent_space(z)
+                        # (1) implemennt p(z) as in i dont need u, as mixture model:
+                        loss = - self.log_likelihood_latent_space(z)
 
-                        predicted_prob = self.predict_class_probs(z).unsqueeze(2)
-                        mu = self.mu_c.unsqueeze(0)
-                        var = self.logvar_c.exp().unsqueeze(0)
-                        pi = torch.log_softmax(self.pi_c, dim=-1).exp().unsqueeze(1).unsqueeze(0)
+                        # (2) calculate the class probs and multiply exponential distribution with it, then take log
+                        # predicted_prob = self.predict_class_probs(z).unsqueeze(2)
+                        # mu = self.mu_c.unsqueeze(0)
+                        # var = self.logvar_c.exp().unsqueeze(0)
+                        # pi = torch.log_softmax(self.pi_c, dim=-1).exp().unsqueeze(1).unsqueeze(0)
 
                         # print(mu.size(), var.size(), z.size(), pi.size(), predicted_prob.size())
 
-                        loss = pi/np.sqrt(2*np.pi) * 1/torch.sqrt(var) * torch.exp(- 0.5*(z.unsqueeze(1)-mu)**2/torch.exp(var))
+                        # loss = predicted_prob*pi/np.sqrt(2*np.pi) * 1/torch.sqrt(var) * torch.exp(- 0.5*(z.unsqueeze(1)-mu)**2/torch.exp(var))
+                        # loss = torch.sum(loss, 1)
+                        # loss = - torch.mean(loss.log(), 1)
 
-                        # do loss like N(mu_k, sig_k)/ sum(N(mu_i,sig_i))
+                        # do loss like N(mu_k, sig_k)/ sum(N(mu_i,sig_i)) - normalized
                         # print(loss.size()) # batch, N_clusters, n_dim
-                        loss = torch.sum(loss, 1)
                         # print(loss.size()) # batch, n_dim
-                        loss = - torch.mean(predicted_prob*loss.log(), 1)
                         # print(loss.size()) # Batch
+
+                        # (3) implement log likelihood, cannot learn pi_c.
                         # loss = torch.mean(0.5*(z-self.mu)**2 * torch.exp(self.logvar_c) + 0.5*self.logvar_c , 1) - torch.log(self.pi_c) + 0.5*np.log(2*np.pi)
                     
                     loss -= logdet_J  / self.n_dims  # is zero in GIN 
@@ -159,8 +163,8 @@ class GIN(nn.Module):
                     optimizer.step()
 
             if epoch%1 == 0:
-                print("predicted prob ", predicted_prob)
-                print("predicted target", self.predict_y(z))
+                # print("predicted prob ", predicted_prob)
+                # print("predicted target", self.predict_y(z))
                 print("logvar" , self.logvar_c)
                 print("mu" , self.mu_c)
                 print("pi" , self.pi_c)
@@ -188,7 +192,7 @@ class GIN(nn.Module):
 
     def predict_class_probs(self, z):
         ''' z: latent space batch '''
-
+        print(self.mu_c)
         # ie, no 'VaDE' trick where we marginalise out y in the gen. model
         pz_y = dist.Independent(dist.Normal(loc=self.mu_c,
                                             scale=torch.exp(0.5 * self.logvar_c)),
