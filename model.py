@@ -162,12 +162,12 @@ class GIN(nn.Module):
                     loss.backward(retain_graph=True) #retain_graph=True
                     optimizer.step()
 
-            if epoch%1 == 0:
-                # print("predicted prob ", predicted_prob)
-                # print("predicted target", self.predict_y(z))
-                print("logvar" , self.logvar_c)
-                print("mu" , self.mu_c)
-                print("pi" , self.pi_c)
+            # if epoch%1 == 0:
+            #     # print("predicted prob ", predicted_prob)
+            #     # print("predicted target", self.predict_y(z))
+            #     print("logvar" , self.logvar_c)
+            #     print("mu" , self.mu_c)
+            #     print("pi" , self.pi_c)
 
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)

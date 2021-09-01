@@ -1,5 +1,7 @@
 import argparse
 import os
+from time import time
+import torch
 from model import GIN
 
 parser = argparse.ArgumentParser(description='Experiments on EMNIST with GIN (training script)')
@@ -28,6 +30,9 @@ parser.add_argument('--unsupervised', type=int, default=0,
                             with leared clustering in latent space (1)')
 parser.add_argument('--n_clusters', type=int, default=40,
                     help='Number of components in gaussian mixture (default 40)')
+parser.add_argument('--n_runs', type=int, default=1,
+                    help='Number of runs (default 1)')
+
 args = parser.parse_args()
 
 assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'
@@ -47,8 +52,31 @@ model = GIN(dataset='EMNIST',
             unsupervised=args.unsupervised,
             n_classes=args.n_clusters)
 
-model.train_model()
+timestamp = str(int(time()))
+if args.n_runs == 1:
+        model.train_model() 
+else:
+        for run in range(args.n_runs):
+                print(f"Starting {run+1} run:")
+                model.train_model()
+                save_dir = os.path.join('./emnist_save/', 'many_runs', timestamp)
+                os.makedirs(save_dir)
+                torch.save(model, os.path.join(save_dir, f'{run+1}.pt'))
 
+                model = GIN(dataset='EMNIST', 
+                        n_epochs=args.n_epochs, 
+                        epochs_per_line=args.epochs_per_line, 
+                        lr=args.lr, 
+                        lr_schedule=args.lr_schedule, 
+                        batch_size=args.batch_size, 
+                        save_frequency=args.save_frequency, 
+                        data_root_dir=args.data_root_dir, 
+                        incompressible_flow=args.incompressible_flow, 
+                        empirical_vars=args.empirical_vars,
+                        unsupervised=args.unsupervised,
+                        n_classes=args.n_clusters)
+                
 
+        # mcc( model, save_dir)
 
 
