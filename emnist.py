@@ -3,6 +3,7 @@ import os
 from time import time
 import torch
 from model import GIN
+from collections import OrderedDict
 
 parser = argparse.ArgumentParser(description='Experiments on EMNIST with GIN (training script)')
 parser.add_argument('--n_epochs', type=int, default=100,
@@ -52,16 +53,24 @@ model = GIN(dataset='EMNIST',
             unsupervised=args.unsupervised,
             n_classes=args.n_clusters)
 
-timestamp = str(int(time()))
+
+                
+def save(model, fname):
+        state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
+        torch.save({'model': state_dict}, fname)
+
+
 if args.n_runs == 1:
         model.train_model() 
 else:
+        timestamp = str(int(time()))
+        save_dir = os.path.join('./emnist_save/', 'many_runs', timestamp)
+        os.makedirs(save_dir)
+
         for run in range(args.n_runs):
                 print(f"Starting {run+1} run:")
                 model.train_model()
-                save_dir = os.path.join('./emnist_save/', 'many_runs', timestamp)
-                os.makedirs(save_dir)
-                torch.save(model, os.path.join(save_dir, f'{run+1}.pt'))
+                save(model, os.path.join(save_dir, f'{run+1}.pt'))
 
                 model = GIN(dataset='EMNIST', 
                         n_epochs=args.n_epochs, 
@@ -75,8 +84,5 @@ else:
                         empirical_vars=args.empirical_vars,
                         unsupervised=args.unsupervised,
                         n_classes=args.n_clusters)
-                
 
-        # mcc( model, save_dir)
-
-
+        # mcc( model, save_dir, args.data_root_dir)
