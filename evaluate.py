@@ -6,6 +6,7 @@ import torch
 import statistics
 from statistics import mode
 from sklearn.cross_decomposition import CCA
+import numpy as np
 
 
 from data import make_dataloader_emnist
@@ -39,36 +40,46 @@ def cca_evaluation(args, GIN, save_dir):
                 # model_ref = load(GIN, saved_models[i], device) 
                 # model_ref.eval()
                 z, logdet_J = model.net(data_val)
-                z = z.detach()
-                y_ref_val = model.predict_y(z.to(device)).reshape(-1, 1)
+                z_ref_val = z.detach()
+                y_ref_val = model.predict_y(z_ref_val.to(device)).reshape(-1, 1)
+                y_ref_val_permutated = permutate(y_ref_val)
 
-                z, logdet_J = model.net(data_test)
-                z = z.detach()
-                y_ref_test = model.predict_y(z.to(device)).reshape(-1, 1)
 
-                model = GIN
-                data = torch.load(saved_models[j])
-                model.load_state_dict(data['model'])
-                model.to(device)
-                model.eval()
-                # model_comp =  load(GIN, saved_models[j], device)
-                # model_comp.eval()
-                z, logdet_J = model.net(data_val)
-                z = z.detach()
-                y_comp_val = model.predict_y(z.to(device)).reshape(-1, 1)
+                # z, logdet_J = model.net(data_test)
+                # z_ref_test = z.detach()
+                # y_ref_test = model.predict_y(z_ref_test.to(device)).reshape(-1, 1)
 
-                z, logdet_J = model.net(data_test)
-                z = z.detach()
-                y_comp_test = model.predict_y(z.to(device)).reshape(-1, 1)
+                # model = GIN
+                # data = torch.load(saved_models[j])
+                # model.load_state_dict(data['model'])
+                # model.to(device)
+                # model.eval()
+                # # model_comp =  load(GIN, saved_models[j], device)
+                # # model_comp.eval()
+                # z, logdet_J = model.net(data_val)
+                # z_comp_val = z.detach()
+                # y_comp_val = model.predict_y(z_comp_val.to(device)).reshape(-1, 1)
+
+                # z, logdet_J = model.net(data_test)
+                # z_comp_test = z.detach()
+                # y_comp_test = model.predict_y(z_comp_test.to(device)).reshape(-1, 1)
 
                 cca = CCA(n_components=1)
-                cca.fit(y_ref_val, y_comp_val)
+                cca.fit(y_ref_val, y_ref_val_permutated)
 
-                score_val = cca.score(y_ref_val, y_comp_val)
-                score_test = cca.score(y_ref_test, y_comp_test)
+                print("y_ref_val, y_ref_val_permutated", y_ref_val.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
 
-                print(f"The validation score for models {i} and {j} after linear transformation is: {score_val}")
-                print(f"The test score for models {i} and {j} after linear transformation is: {score_test}")
+                y_ref_val_permutated_predict = cca.predict(y_ref_val)
+                print("y_ref_val, y_ref_val_permutated", y_ref_val_permutated_predict.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
+                print(y_ref_val_permutated_predict.reshape(1,-1) - y_ref_val_permutated.reshape(1,-1))
+
+                # y_ref_val_t, y_comp_val_t = cca.transform(y_ref_val, y_comp_val)
+                # y_ref_test_t, y_comp_test_t = cca.transform(y_ref_test, y_comp_test)
+                # score_val = cca.score(y_ref_val, y_ref_val_permutated)
+                # score_test = cca.score(y_ref_test, y_ref_test )
+
+                # print(f"The validation score for models {i} and {j} after linear transformation is: {score_val}")
+                # print(f"The test score for models {i} and {j} after linear transformation is: {score_test}")
     
 
 def mcc_evaluation(args, GIN, save_dir):
@@ -158,5 +169,10 @@ def learn_permutation(y_ref, y_comp, n_clusters):
 
         permutation.append(y_permuted_idx)
 
+def permutate(y):
+    permutation = np.random.permutation(40)
+    y_permuted = np.array([permutation[k] for k in y])
+    print("Permutation matrix", permutation)
+    return y_permuted
 
 
