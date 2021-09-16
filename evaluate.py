@@ -5,9 +5,71 @@ from os.path import isfile, join
 import torch
 import statistics
 from statistics import mode
+from sklearn.cross_decomposition import CCA
+
 
 from data import make_dataloader_emnist
 
+def cca_evaluation(args, GIN, save_dir):
+
+    saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f))]
+    num_runs = len(saved_models)
+
+    # 1: load test data set
+    batch_size = 5000
+    test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
+    device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
+
+    for batch_idx, (data, target) in enumerate(test_loader):
+        if batch_idx < 1:
+            data_val = data[:int(batch_size/10)].to(device)
+            data_test = data[int(batch_size/10)+1:].to(device)
+
+    for i in range(num_runs):
+        for j in range(num_runs):
+            if j != i:
+                print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
+                
+                model = GIN
+                data = torch.load(saved_models[i])
+                model.load_state_dict(data['model'])
+                model.to(device)
+                model.eval()
+
+                # model_ref = load(GIN, saved_models[i], device) 
+                # model_ref.eval()
+                z, logdet_J = model.net(data_val)
+                z = z.detach()
+                y_ref_val = model.predict_y(z.to(device)).reshape(-1, 1)
+
+                z, logdet_J = model.net(data_test)
+                z = z.detach()
+                y_ref_test = model.predict_y(z.to(device)).reshape(-1, 1)
+
+                model = GIN
+                data = torch.load(saved_models[j])
+                model.load_state_dict(data['model'])
+                model.to(device)
+                model.eval()
+                # model_comp =  load(GIN, saved_models[j], device)
+                # model_comp.eval()
+                z, logdet_J = model.net(data_val)
+                z = z.detach()
+                y_comp_val = model.predict_y(z.to(device)).reshape(-1, 1)
+
+                z, logdet_J = model.net(data_test)
+                z = z.detach()
+                y_comp_test = model.predict_y(z.to(device)).reshape(-1, 1)
+
+                cca = CCA(n_components=1)
+                cca.fit(y_ref_val, y_comp_val)
+
+                score_val = cca.score(y_ref_val, y_comp_val)
+                score_test = cca.score(y_ref_test, y_comp_test)
+
+                print(f"The validation score for models {i} and {j} after linear transformation is: {score_val}")
+                print(f"The test score for models {i} and {j} after linear transformation is: {score_test}")
+    
 
 def mcc_evaluation(args, GIN, save_dir):
     saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f))]

@@ -4,7 +4,7 @@ from time import time
 import torch
 from model import GIN
 from collections import OrderedDict
-from evaluate import mcc_evaluation
+from evaluate import cca_evaluation
 
 
 def arg_parse():
@@ -56,7 +56,7 @@ def main():
                 model.train_model()
         elif args.n_runs == 0:
                 save_dir = os.path.join('./emnist_save/', 'many_runs', '1630500545')
-                mcc_evaluation(args, model, save_dir)
+                cca_evaluation(args, model, save_dir)
         else:
                 timestamp = str(int(time()))
                 save_dir = os.path.join('./emnist_save/', 'many_runs', timestamp)
