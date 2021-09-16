@@ -71,6 +71,10 @@ def cca_evaluation(args, GIN, save_dir):
                 # y_comp_test = model.predict_y(z_comp_test.to(device)).reshape(-1, 1)
                 np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
                 conf = confusion_matrix(y_ref_val, y_comp_val)
+
+                # if it would be identifiable, in each row of confusion matrix at least 1 non zero element ( all zero if not sample of this class )
+                # but how to measure 'degree' of non-identifiablility 
+
                 print(conf)
                 learned_permutation = np.argmax(conf, axis=1)
                 print("learned permutation", learned_permutation)
