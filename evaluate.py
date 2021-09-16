@@ -6,6 +6,7 @@ import torch
 import statistics
 from statistics import mode
 from sklearn.cross_decomposition import CCA
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import numpy as np
 
 
@@ -17,7 +18,7 @@ def cca_evaluation(args, GIN, save_dir):
     num_runs = len(saved_models)
 
     # 1: load test data set
-    batch_size = 5000
+    batch_size = 20000
     test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
     device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -41,37 +42,52 @@ def cca_evaluation(args, GIN, save_dir):
                 # model_ref.eval()
                 z, logdet_J = model.net(data_val)
                 z_ref_val = z.detach()
-                y_ref_val = model.predict_y(z_ref_val.to(device)).reshape(-1, 1)
-                y_ref_val_permutated = permutate(y_ref_val)
+                y_ref_val = model.predict_y(z_ref_val.to(device)) #.reshape(-1, 1)
+                # y_ref_val_permutated = permutate(y_ref_val)
 
+                # # np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
+                # conf = confusion_matrix(y_ref_val, y_ref_val_permutated)
+                # # print(conf)
+                # learned_permutation = np.argmax(conf, axis=1)
+                # print("learned permutation", learned_permutation)
 
                 # z, logdet_J = model.net(data_test)
                 # z_ref_test = z.detach()
                 # y_ref_test = model.predict_y(z_ref_test.to(device)).reshape(-1, 1)
 
-                # model = GIN
-                # data = torch.load(saved_models[j])
-                # model.load_state_dict(data['model'])
-                # model.to(device)
-                # model.eval()
-                # # model_comp =  load(GIN, saved_models[j], device)
-                # # model_comp.eval()
-                # z, logdet_J = model.net(data_val)
-                # z_comp_val = z.detach()
-                # y_comp_val = model.predict_y(z_comp_val.to(device)).reshape(-1, 1)
+                model = GIN
+                data = torch.load(saved_models[j])
+                model.load_state_dict(data['model'])
+                model.to(device)
+                model.eval()
+                # model_comp =  load(GIN, saved_models[j], device)
+                # model_comp.eval()
+                z, logdet_J = model.net(data_val)
+                z_comp_val = z.detach()
+                y_comp_val = model.predict_y(z_comp_val.to(device)).reshape(-1, 1)
 
                 # z, logdet_J = model.net(data_test)
                 # z_comp_test = z.detach()
                 # y_comp_test = model.predict_y(z_comp_test.to(device)).reshape(-1, 1)
+                np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
+                conf = confusion_matrix(y_ref_val, y_comp_val)
+                print(conf)
+                learned_permutation = np.argmax(conf, axis=1)
+                print("learned permutation", learned_permutation)
+                exit(1)
 
-                cca = CCA(n_components=1)
-                cca.fit(y_ref_val, y_ref_val_permutated)
+                # cca = CCA(n_components=1)
+                # cca.fit(y_ref_val, y_ref_val_permutated)
 
-                print("y_ref_val, y_ref_val_permutated", y_ref_val.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
+                # print("y_ref_val, y_ref_val_permutated", y_ref_val.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
 
-                y_ref_val_permutated_predict = cca.predict(y_ref_val)
-                print("y_ref_val, y_ref_val_permutated", y_ref_val_permutated_predict.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
-                print(y_ref_val_permutated_predict.reshape(1,-1) - y_ref_val_permutated.reshape(1,-1))
+                # y_ref_val_permutated_predict = cca.transform(y_ref_val)
+                # print("y_ref_val, y_ref_val_permutated", y_ref_val_permutated_predict.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
+                # print(y_ref_val_permutated_predict.reshape(1,-1) - y_ref_val_permutated.reshape(1,-1))
+
+                # y_ref_val_permutated_predict = cca.inverse_transform(y_ref_val)
+                # print("y_ref_val, y_ref_val_permutated", y_ref_val_permutated_predict.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
+                # print(y_ref_val_permutated_predict.reshape(1,-1) - y_ref_val_permutated.reshape(1,-1))
 
                 # y_ref_val_t, y_comp_val_t = cca.transform(y_ref_val, y_comp_val)
                 # y_ref_test_t, y_comp_test_t = cca.transform(y_ref_test, y_comp_test)
