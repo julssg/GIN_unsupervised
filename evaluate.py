@@ -46,12 +46,12 @@ def cca_evaluation(args, GIN, save_dir):
                 z, logdet_J = model.net(data_val)
                 z_ref_val = z.detach()
                 y_ref_val = model.predict_y(z_ref_val.to(device)).reshape(-1, 1)
-                #categ = np.arange(40).reshape(-1, 1)
-                #print(categ)
-                y_ref_val_encoded = OneHotEncoder(categories=[range(40)]*1).fit_transform(y_ref_val).toarray()
-                # do one enclode but with all 40 classes ( if eg label 30 not in val data, then not in consideration)
-                # y_ref_val_permutated = permutate(y_ref_val)
 
+                # do one enclode but with all 40 classes ( if eg label 30 not in val data, then not in consideration)
+                y_ref_val_encoded = OneHotEncoder(categories=[range(40)]*1).fit_transform(y_ref_val).toarray()
+                one_hot_encoded_classes = OneHotEncoder(categories=[range(40)]*1).fit_transform(np.arange(40).reshape(-1, 1)).toarray()
+                
+                # y_ref_val_permutated = permutate(y_ref_val)
                 # # np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
                 # conf = confusion_matrix(y_ref_val, y_ref_val_permutated)
                 # # print(conf)
@@ -88,13 +88,17 @@ def cca_evaluation(args, GIN, save_dir):
 
                 clf = tree.DecisionTreeClassifier()
                 clf = clf.fit(y_ref_val_encoded, y_comp_val)
-                probs = clf.predict_proba(y_ref_val_encoded[:5])
-                print(y_ref_val[:5], y_comp_val[:5])
-                print(probs)
-                exit(1)
+                # probs = clf.predict_proba(y_ref_val_encoded[:15])
+                # prediction = clf.predict(y_ref_val_encoded)
+                # print(y_ref_val[:15], y_comp_val[:15])
+                # print(prediction, y_comp_val[:15])
+                # print(probs)
+                
+                prediction = clf.predict(one_hot_encoded_classes)
+                print(f"the learned mapping is {np.arange(40)} to {prediction}.") 
 
                 # cca = CCA(n_components=1)
-                # cca.fit(y_ref_val, y_ref_val_permutated)
+                # cca.fit(y_ref_val_encoded , y_comp_val)
 
                 # print("y_ref_val, y_ref_val_permutated", y_ref_val.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
 
@@ -106,13 +110,16 @@ def cca_evaluation(args, GIN, save_dir):
                 # print("y_ref_val, y_ref_val_permutated", y_ref_val_permutated_predict.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
                 # print(y_ref_val_permutated_predict.reshape(1,-1) - y_ref_val_permutated.reshape(1,-1))
 
-                # y_ref_val_t, y_comp_val_t = cca.transform(y_ref_val, y_comp_val)
+                # y_ref_val_t = cca.predict(y_ref_val_encoded)
                 # y_ref_test_t, y_comp_test_t = cca.transform(y_ref_test, y_comp_test)
-                # score_val = cca.score(y_ref_val, y_ref_val_permutated)
+                # score_val = cca.score(y_ref_val_encoded,  y_comp_val)
                 # score_test = cca.score(y_ref_test, y_ref_test )
 
                 # print(f"The validation score for models {i} and {j} after linear transformation is: {score_val}")
+                # print(y_ref_val_t[:5], y_comp_val[:5])
                 # print(f"The test score for models {i} and {j} after linear transformation is: {score_test}")
+
+                exit(1)
     
 
 def mcc_evaluation(args, GIN, save_dir):
