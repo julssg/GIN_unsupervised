@@ -9,6 +9,7 @@ from sklearn.cross_decomposition import CCA
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn import tree
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import accuracy_score
 
 import numpy as np
 
@@ -27,8 +28,8 @@ def cca_evaluation(args, GIN, save_dir):
 
     for batch_idx, (data, target) in enumerate(test_loader):
         if batch_idx < 1:
-            data_val = data[:int(batch_size/10)].to(device)
-            data_test = data[int(batch_size/10)+1:].to(device)
+            data_val = data[:int(batch_size/5)].to(device)
+            data_test = data[int(batch_size/5)+1:].to(device)
 
     for i in range(num_runs):
         for j in range(num_runs):
@@ -97,6 +98,11 @@ def cca_evaluation(args, GIN, save_dir):
                 prediction = clf.predict(one_hot_encoded_classes)
                 print(f"the learned mapping is {np.arange(40)} to {prediction}.") 
 
+                validation_accuracy = accuracy_score(y_comp_val, clf.predict(y_ref_val_encoded))
+
+                print(f"The Validation accuracy of the decicion tree method is: {validation_accuracy}.")
+                
+                # test_accuracy = accuracy_score(y_comp_test, clf.predict(y_ref_test_encoded))
                 # cca = CCA(n_components=1)
                 # cca.fit(y_ref_val_encoded , y_comp_val)
 
@@ -119,7 +125,7 @@ def cca_evaluation(args, GIN, save_dir):
                 # print(y_ref_val_t[:5], y_comp_val[:5])
                 # print(f"The test score for models {i} and {j} after linear transformation is: {score_test}")
 
-                exit(1)
+                # exit(1)
     
 
 def mcc_evaluation(args, GIN, save_dir):
