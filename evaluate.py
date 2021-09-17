@@ -7,6 +7,9 @@ import statistics
 from statistics import mode
 from sklearn.cross_decomposition import CCA
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn import tree
+from sklearn.preprocessing import OneHotEncoder
+
 import numpy as np
 
 
@@ -42,7 +45,11 @@ def cca_evaluation(args, GIN, save_dir):
                 # model_ref.eval()
                 z, logdet_J = model.net(data_val)
                 z_ref_val = z.detach()
-                y_ref_val = model.predict_y(z_ref_val.to(device)) #.reshape(-1, 1)
+                y_ref_val = model.predict_y(z_ref_val.to(device)).reshape(-1, 1)
+                #categ = np.arange(40).reshape(-1, 1)
+                #print(categ)
+                y_ref_val_encoded = OneHotEncoder(categories=[range(40)]*1).fit_transform(y_ref_val).toarray()
+                # do one enclode but with all 40 classes ( if eg label 30 not in val data, then not in consideration)
                 # y_ref_val_permutated = permutate(y_ref_val)
 
                 # # np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
@@ -64,7 +71,7 @@ def cca_evaluation(args, GIN, save_dir):
                 # model_comp.eval()
                 z, logdet_J = model.net(data_val)
                 z_comp_val = z.detach()
-                y_comp_val = model.predict_y(z_comp_val.to(device)).reshape(-1, 1)
+                y_comp_val = model.predict_y(z_comp_val.to(device)) # .reshape(-1, 1)
 
                 # z, logdet_J = model.net(data_test)
                 # z_comp_test = z.detach()
@@ -75,9 +82,15 @@ def cca_evaluation(args, GIN, save_dir):
                 # if it would be identifiable, in each row of confusion matrix at least 1 non zero element ( all zero if not sample of this class )
                 # but how to measure 'degree' of non-identifiablility 
 
-                print(conf)
-                learned_permutation = np.argmax(conf, axis=1)
-                print("learned permutation", learned_permutation)
+                # print(conf)
+                # learned_permutation = np.argmax(conf, axis=1)
+                # print("learned permutation", learned_permutation)
+
+                clf = tree.DecisionTreeClassifier()
+                clf = clf.fit(y_ref_val_encoded, y_comp_val)
+                probs = clf.predict_proba(y_ref_val_encoded[:5])
+                print(y_ref_val[:5], y_comp_val[:5])
+                print(probs)
                 exit(1)
 
                 # cca = CCA(n_components=1)
