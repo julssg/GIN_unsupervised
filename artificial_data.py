@@ -1,4 +1,7 @@
 import argparse
+import torch
+import os
+from collections import OrderedDict
 from model import GIN
 
 parser = argparse.ArgumentParser(description='Artificial data experiments (2d data embedded in 10d) with GIN.')
@@ -46,6 +49,19 @@ model = GIN(dataset='10d',
             unsupervised=args.unsupervised,
             init_identity=args.init_identity, 
             save_frequency=args.n_epochs)
-model.train_model()
+
+# save a inital version of the model, to train the model multiple times on the same artifical data set (initialization is the same)
+
+state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
+os.makedirs(os.path.join(model.save_dir, 'model_save'))
+os.makedirs(os.path.join(model.save_dir, 'figures'))
+init_model_path = os.path.join(model.save_dir, 'model_save', 'init.pt')
+torch.save({'model': state_dict}, init_model_path )
+
+for i in range(5):
+        data = torch.load(init_model_path)
+        model.load_state_dict(data['model'])
+        model.to(model.device)
+        model.train_model()
 
 

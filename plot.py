@@ -66,7 +66,7 @@ def artificial_data_reconstruction_plot(model, latent, data, target, unsupervise
                 
                 plt.tight_layout()
                 fig_idx = 4*dim_order + 2*max(dim1_factor, 0) + max(dim2_factor, 0)
-                plt.savefig(os.path.join(model.save_dir, 'figures', f'reconstruction_{fig_idx:d}.png'))
+                plt.savefig(os.path.join(model.save_dir, 'figures', f'reconstruction_{fig_idx:d}_{str(int(time()))}.png'))
                 plt.close()
     
 

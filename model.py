@@ -83,13 +83,13 @@ class GIN(nn.Module):
         return x, logdet_J 
     
     def train_model(self):
-        os.makedirs(self.save_dir)
+        # os.makedirs(self.save_dir)
         with open(os.path.join(self.save_dir, 'log.txt'), 'w') as f:
             f.write(f'incompressible_flow {self.incompressible_flow}\n')
             f.write(f'empirical_vars {self.empirical_vars}\n')
             f.write(f'init_identity {self.init_identity}\n')
-        os.makedirs(os.path.join(self.save_dir, 'model_save'))
-        os.makedirs(os.path.join(self.save_dir, 'figures'))
+        # os.makedirs(os.path.join(self.save_dir, 'model_save'))
+        # os.makedirs(os.path.join(self.save_dir, 'figures'))
         print(f'\nTraining model for {self.n_epochs} epochs \n')
         self.train()
         self.to(self.device)
