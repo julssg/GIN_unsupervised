@@ -230,7 +230,7 @@ class GIN(nn.Module):
     
     def make_plots(self):
         if self.dataset == '10d':
-            artificial_data_reconstruction_plot(self, self.latent, self.data, self.target)
+            artificial_data_reconstruction_plot(self, self.latent, self.data, self.target, self.unsupervised)
         elif self.dataset == 'EMNIST':
             os.makedirs(os.path.join(self.save_dir, 'figures', f'epoch_{self.epoch+1:03d}'))
             self.set_mu_sig()
@@ -396,6 +396,7 @@ def construct_net_emnist(coupling_block):
 
 # function is here rather than in data.py to prevent circular import
 def generate_artificial_data_10d(n_clusters, n_data_points):
+
     latent_means = torch.rand(n_clusters, 2)*10 - 5         # in range (-5, 5)
     latent_stds  = torch.rand(n_clusters, 2)*2.5 + 0.5      # in range (0.5, 3)
     
@@ -404,6 +405,6 @@ def generate_artificial_data_10d(n_clusters, n_data_points):
     latent = torch.cat([latent, torch.randn(n_data_points, 8)*1e-2], 1)
     
     random_transf = construct_net_10d('glow', init_identity=False)
-    data = random_transf(latent).detach()
+    data = random_transf(latent)[0].detach()
     
     return latent, data, labels

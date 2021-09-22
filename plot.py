@@ -8,18 +8,28 @@ import os
 
 matplotlib.use("Agg")
 
-def artificial_data_reconstruction_plot(model, latent, data, target):
+def artificial_data_reconstruction_plot(model, latent, data, target, unsupervised): 
     """
     This function plots 8 figures of a reconstructed latent space, each for a different orientation of the 
     reconstructed latent space.
     """
     model.eval()
     model.cpu()
-    z_reconstructed = model(data).detach()
-    sig = torch.stack([z_reconstructed[target==i].std(0, unbiased=False) for i in range(model.n_classes)])
-    rms_sig = np.sqrt(np.mean(sig.numpy()**2, 0))
-    latent_sig = torch.stack([latent[target==i].std(0, unbiased=False) for i in range(model.n_classes)])
-    latent_rms_sig = np.sqrt(np.mean(latent_sig.numpy()**2, 0))
+    z_reconstructed = model(data)[0].detach()
+    if not unsupervised:
+        sig = torch.stack([z_reconstructed[target==i].std(0, unbiased=False) for i in range(model.n_classes)])
+        rms_sig = np.sqrt(np.mean(sig.numpy()**2, 0))
+        latent_sig = torch.stack([latent[target==i].std(0, unbiased=False) for i in range(model.n_classes)])
+        latent_rms_sig = np.sqrt(np.mean(latent_sig.numpy()**2, 0))
+        target_learned = target
+    else:
+        target_predicted = model.predict_y(z_reconstructed)
+        sig = torch.stack([z_reconstructed[target_predicted==i].std(0, unbiased=False) for i in range(model.n_classes)])
+        rms_sig = np.sqrt(np.mean(sig.numpy()**2, 0))
+        latent_sig = torch.stack([latent[target_predicted==i].std(0, unbiased=False) for i in range(model.n_classes)])
+        latent_rms_sig = np.sqrt(np.mean(latent_sig.numpy()**2, 0))
+        target_learned = target_predicted
+
     
     for dim_order in range(2):
         for dim1_factor in [1,-1]:
@@ -41,7 +51,7 @@ def artificial_data_reconstruction_plot(model, latent, data, target):
                 plt.subplot(1, 4, 3)
                 dim1 = np.flip(np.argsort(rms_sig))[dim_order]
                 dim2 = np.flip(np.argsort(rms_sig))[(1+dim_order)%2]
-                plt.scatter(dim1_factor*z_reconstructed[:,dim1], dim2_factor*z_reconstructed[:,dim2], c=target, s=6, alpha=0.3)
+                plt.scatter(dim1_factor*z_reconstructed[:,dim1], dim2_factor*z_reconstructed[:,dim2], c=target_learned, s=6, alpha=0.3)
                 plt.xticks([])
                 plt.yticks([])
                 plt.title('RECONSTRUCTION', fontsize=16, family='serif')
