@@ -20,16 +20,22 @@ def cca_evaluation(args, GIN, save_dir):
 
     saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f))]
     num_runs = len(saved_models)
-
-    # 1: load test data set
-    batch_size = 20000
-    test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
     device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
 
-    for batch_idx, (data, target) in enumerate(test_loader):
-        if batch_idx < 1:
-            data_val = data[:int(batch_size/5)].to(device)
-            data_test = data[int(batch_size/5)+1:].to(device)
+    if GIN.dataset == 'EMNIST':
+        # 1: load test data set
+        batch_size = 20000
+        test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
+        dim = 300
+
+        for batch_idx, (data, target) in enumerate(test_loader):
+            if batch_idx < 1:
+                data_val = data[:int(batch_size/5)].to(device)
+                data_test = data[int(batch_size/5)+1:].to(device)
+    
+    else:
+        data_val = GIN.data
+        dim = 10
 
     for i in range(num_runs):
         for j in range(num_runs):
@@ -46,11 +52,11 @@ def cca_evaluation(args, GIN, save_dir):
                 # model_ref.eval()
                 z, logdet_J = model.net(data_val)
                 z_ref_val = z.detach()
-                y_ref_val = model.predict_y(z_ref_val.to(device)).reshape(-1, 1)
+                # y_ref_val = model.predict_y(z_ref_val.to(device)).reshape(-1, 1)
 
                 # do one enclode but with all 40 classes ( if eg label 30 not in val data, then not in consideration)
-                y_ref_val_encoded = OneHotEncoder(categories=[range(40)]*1).fit_transform(y_ref_val).toarray()
-                one_hot_encoded_classes = OneHotEncoder(categories=[range(40)]*1).fit_transform(np.arange(40).reshape(-1, 1)).toarray()
+                # y_ref_val_encoded = OneHotEncoder(categories=[range(40)]*1).fit_transform(y_ref_val).toarray()
+                # one_hot_encoded_classes = OneHotEncoder(categories=[range(40)]*1).fit_transform(np.arange(40).reshape(-1, 1)).toarray()
                 
                 # y_ref_val_permutated = permutate(y_ref_val)
                 # # np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
@@ -72,13 +78,13 @@ def cca_evaluation(args, GIN, save_dir):
                 # model_comp.eval()
                 z, logdet_J = model.net(data_val)
                 z_comp_val = z.detach()
-                y_comp_val = model.predict_y(z_comp_val.to(device)) # .reshape(-1, 1)
+                # y_comp_val = model.predict_y(z_comp_val.to(device)) # .reshape(-1, 1)
 
                 # z, logdet_J = model.net(data_test)
                 # z_comp_test = z.detach()
                 # y_comp_test = model.predict_y(z_comp_test.to(device)).reshape(-1, 1)
-                np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
-                conf = confusion_matrix(y_ref_val, y_comp_val)
+                # np.set_printoptions(precision=None, threshold=20000, edgeitems=None, linewidth=None, suppress=None, nanstr=None, infstr=None, formatter=None)
+                # conf = confusion_matrix(y_ref_val, y_comp_val)
 
                 # if it would be identifiable, in each row of confusion matrix at least 1 non zero element ( all zero if not sample of this class )
                 # but how to measure 'degree' of non-identifiablility 
@@ -87,24 +93,24 @@ def cca_evaluation(args, GIN, save_dir):
                 # learned_permutation = np.argmax(conf, axis=1)
                 # print("learned permutation", learned_permutation)
 
-                clf = tree.DecisionTreeClassifier()
-                clf = clf.fit(y_ref_val_encoded, y_comp_val)
+                # clf = tree.DecisionTreeClassifier()
+                # clf = clf.fit(y_ref_val_encoded, y_comp_val)
                 # probs = clf.predict_proba(y_ref_val_encoded[:15])
                 # prediction = clf.predict(y_ref_val_encoded)
                 # print(y_ref_val[:15], y_comp_val[:15])
                 # print(prediction, y_comp_val[:15])
                 # print(probs)
                 
-                prediction = clf.predict(one_hot_encoded_classes)
-                print(f"the learned mapping is {np.arange(40)} to {prediction}.") 
+                # prediction = clf.predict(one_hot_encoded_classes)
+                # print(f"the learned mapping is {np.arange(40)} to {prediction}.") 
 
-                validation_accuracy = accuracy_score(y_comp_val, clf.predict(y_ref_val_encoded))
+                # validation_accuracy = accuracy_score(y_comp_val, clf.predict(y_ref_val_encoded))
 
-                print(f"The Validation accuracy of the decicion tree method is: {validation_accuracy}.")
+                # print(f"The Validation accuracy of the decicion tree method is: {validation_accuracy}.")
                 
                 # test_accuracy = accuracy_score(y_comp_test, clf.predict(y_ref_test_encoded))
-                # cca = CCA(n_components=1)
-                # cca.fit(y_ref_val_encoded , y_comp_val)
+                cca = CCA(n_components=dim)
+                cca.fit(z_ref_val, z_comp_val )
 
                 # print("y_ref_val, y_ref_val_permutated", y_ref_val.reshape(1,-1), y_ref_val_permutated.reshape(1,-1))
 
@@ -118,10 +124,10 @@ def cca_evaluation(args, GIN, save_dir):
 
                 # y_ref_val_t = cca.predict(y_ref_val_encoded)
                 # y_ref_test_t, y_comp_test_t = cca.transform(y_ref_test, y_comp_test)
-                # score_val = cca.score(y_ref_val_encoded,  y_comp_val)
+                score_val = cca.score(z_ref_val, z_comp_val )
                 # score_test = cca.score(y_ref_test, y_ref_test )
 
-                # print(f"The validation score for models {i} and {j} after linear transformation is: {score_val}")
+                print(f"The validation score for models {i} and {j} after linear transformation is: {score_val}")
                 # print(y_ref_val_t[:5], y_comp_val[:5])
                 # print(f"The test score for models {i} and {j} after linear transformation is: {score_test}")
 
