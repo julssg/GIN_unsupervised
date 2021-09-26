@@ -20,16 +20,22 @@ def cca_evaluation(args, GIN, save_dir):
 
     saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f))]
     num_runs = len(saved_models)
-
-    # 1: load test data set
-    batch_size = 20000
-    test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
     device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
 
-    for batch_idx, (data, target) in enumerate(test_loader):
-        if batch_idx < 1:
-            data_val = data[:int(batch_size/3)].to(device)
-            data_test = data[int(batch_size/3)+1:].to(device)
+    if GIN.dataset == 'EMNIST':
+        # 1: load test data set
+        batch_size = 20000
+        test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
+        dim = 300
+
+        for batch_idx, (data, target) in enumerate(test_loader):
+            if batch_idx < 1:
+                data_val = data[:int(batch_size/5)].to(device)
+                data_test = data[int(batch_size/5)+1:].to(device)
+    
+    else:
+        data_val = GIN.data
+        dim = 10
 
     for i in range(num_runs):
         for j in range(num_runs):
@@ -108,7 +114,7 @@ def cca_evaluation(args, GIN, save_dir):
                 
                 # test_accuracy = accuracy_score(y_comp_test, clf.predict(y_ref_test_encoded))
                 try:
-                    cca = CCA(n_components=350)
+                    cca = CCA(n_components=dim)
                     cca.fit(z_ref_val , z_comp_val)
                     # print(z_ref_val.shape)
                     # x_scores, y_scores = cca.transform(z_ref_val , z_ref_val)
