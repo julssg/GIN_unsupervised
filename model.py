@@ -73,7 +73,7 @@ class GIN(nn.Module):
             self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
             self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
 
-            # self.set_mu_sig(init=True)    # test init first 10 clusters with real mu and sigma
+            self.set_mu_sig(init=True, with_batches=True)   
             # self.std_c = torch.exp(0.5*self.logvar_c)
         
         self.to(self.device)
@@ -83,13 +83,18 @@ class GIN(nn.Module):
         return x, logdet_J 
     
     def train_model(self):
-        # os.makedirs(self.save_dir)
+        try:
+            os.makedirs(self.save_dir)
+            os.makedirs(os.path.join(self.save_dir, 'model_save'))
+            os.makedirs(os.path.join(self.save_dir, 'figures'))
+        except:
+            print("Folder directories already exist.")
+
         with open(os.path.join(self.save_dir, 'log.txt'), 'w') as f:
             f.write(f'incompressible_flow {self.incompressible_flow}\n')
             f.write(f'empirical_vars {self.empirical_vars}\n')
             f.write(f'init_identity {self.init_identity}\n')
-        # os.makedirs(os.path.join(self.save_dir, 'model_save'))
-        # os.makedirs(os.path.join(self.save_dir, 'figures'))
+
         print(f'\nTraining model for {self.n_epochs} epochs \n')
         self.train()
         self.to(self.device)
@@ -244,7 +249,7 @@ class GIN(nn.Module):
         else:
             raise RuntimeError("Check dataset name. Doesn't match.")
     
-    def set_mu_sig(self, init=False, n_batches=40):
+    def set_mu_sig(self, init=False, with_batches=False, n_batches=40):
         
         if self.empirical_vars or init:
             examples = iter(self.test_loader)
@@ -272,10 +277,22 @@ class GIN(nn.Module):
                     self.sig = self.log_sig.exp().detach()
         if self.unsupervised:
             if init:
-                for i in range(10):
-                    self.mu_c.data[i] = latent[target == i].mean(0)
-                    self.logvar_c.data[i] = torch.log(latent[target == i].std(0)**2)
-                    self.pi_c.data[i] = 1/10
+                if not with_batches:
+                    for i in range(10):
+                        self.mu_c.data[i] = latent[target == i].mean(0)
+                        self.logvar_c.data[i] = torch.log(latent[target == i].std(0)**2)
+                        self.pi_c.data[i] = 1/10
+                else:
+                    print("Before init with batches:")
+                    print(self.mu_c)
+                    print(self.logvar_c)
+                    batch_len = round(len(latent)/self.n_classes)-1
+                    print(batch_len)
+                    self.mu_c.data = torch.stack([latent[i*batch_len:(i+1)*batch_len].mean(0) for i in range(self.n_classes)])
+                    self.logvar_c.data = torch.stack([torch.log(latent[i*batch_len:(i+1)*batch_len].std(0)**2) for i in range(self.n_classes)])
+                    print("After init with batches:")
+                    print(self.mu_c)
+                    print(self.logvar_c)
             else:
                 self.mu = self.mu_c.detach()
                 self.sig = torch.exp(0.5 * self.logvar_c).detach()
