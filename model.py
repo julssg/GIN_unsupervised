@@ -167,6 +167,13 @@ class GIN(nn.Module):
                     loss.backward(retain_graph=True) #retain_graph=True
                     optimizer.step()
 
+            if epoch in [1,3,5]:
+                self.set_mu_sig(init=True, with_batches=True)  
+                print("Re-init Parameters with batches.")
+            #    print("logvar" , self.logvar_c)
+            #    print("mu" , self.mu_c)
+            #    print("pi" , self.pi_c)
+
             # if epoch%1 == 0:
             #     # print("predicted prob ", predicted_prob)
             #     # print("predicted target", self.predict_y(z))
@@ -288,8 +295,8 @@ class GIN(nn.Module):
                     print(self.logvar_c)
                     batch_len = round(len(latent)/self.n_classes)-1
                     print(batch_len)
-                    self.mu_c.data = torch.stack([latent[i*batch_len:(i+1)*batch_len].mean(0) for i in range(self.n_classes)])
-                    self.logvar_c.data = torch.stack([torch.log(latent[i*batch_len:(i+1)*batch_len].std(0)**2) for i in range(self.n_classes)])
+                    self.mu_c.data = torch.stack([latent[i*batch_len:(i+1)*batch_len].mean(0) for i in range(self.n_classes)]).to(self.device)
+                    self.logvar_c.data = torch.stack([torch.log(latent[i*batch_len:(i+1)*batch_len].std(0)**2) for i in range(self.n_classes)]).to(self.device)
                     print("After init with batches:")
                     print(self.mu_c)
                     print(self.logvar_c)
