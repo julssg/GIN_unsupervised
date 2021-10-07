@@ -37,12 +37,17 @@ def arg_parse():
         parser.add_argument('--n_runs', type=int, default=1,
                         help='Number of runs (default 1), if 0 selected, than only evaluation will be performed \
                                 path needs to be given in emnist.py script.')
+        parser.add_argument('--init', type=str, default='xavier',
+                        help='Initialization method, can be chosen to be "batch", "supervised" or "xavier" uniform (default). Batch and supervised \
+                                initialization include also a re-initialization after the 1, 2 and 5th epoch.')
 
         args = parser.parse_args()
 
         assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'
         assert args.empirical_vars in [0,1], 'Argument should be 0 or 1'
         assert args.unsupervised in [0,1], 'Argument should be 0 or 1'
+        assert args.init in ["batch", "supervised", "xavier"] and args.unsupervised == 1, \
+                'init methods only if training unsupervised, should be in ["batch", "supervised", "xavier"]'
 
         return args
 
@@ -89,7 +94,8 @@ def model_init(args):
                         incompressible_flow=args.incompressible_flow, 
                         empirical_vars=args.empirical_vars,
                         unsupervised=args.unsupervised,
-                        n_classes=args.n_clusters)
+                        n_classes=args.n_clusters,
+                        init_method=args.init)
         return model
 
 
