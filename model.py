@@ -14,7 +14,7 @@ import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 
 class GIN(nn.Module):
-    def __init__(self, dataset, n_epochs, epochs_per_line, lr, lr_schedule, batch_size, save_frequency, incompressible_flow, empirical_vars, unsupervised, data_root_dir='./', n_classes=None, n_data_points=None, init_identity=True):
+    def __init__(self, dataset, n_epochs, epochs_per_line, lr, lr_schedule, batch_size, save_frequency, incompressible_flow, empirical_vars, unsupervised, data_root_dir='./', n_classes=None, n_data_points=None, init_identity=True, init_method="xavier"):
         super().__init__()
         
         self.dataset = dataset
@@ -28,6 +28,7 @@ class GIN(nn.Module):
         self.empirical_vars = bool(empirical_vars)
         self.unsupervised = bool(unsupervised)
         self.init_identity = bool(init_identity)
+        self.init_method = init_method
         
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.timestamp = str(int(time()))
@@ -62,19 +63,40 @@ class GIN(nn.Module):
             self.set_mu_sig(init=True)
         
         if unsupervised:
-            # self.mu = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
-            # self.log_sig = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+            print(f"Initializing the parameters with the method: {self.init_method}.")
+            if self.init_method == "xavier":
+                
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
 
-            self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                if self.n_classes == 120:
+                    '''Test what happens when using the xavier uniform distribution of d=40 to init 120 classes.'''
+                    self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                    mu_c = nn.init.xavier_uniform_(torch.zeros(int(self.n_classes/3),self.n_dims, device=self.device))
+                    self.mu_c = nn.Parameter(torch.cat([mu_c, mu_c, mu_c], dim=0), requires_grad=True)
+                    logvar_c = nn.init.xavier_uniform_(torch.zeros(int(self.n_classes/3),self.n_dims, device=self.device))
+                    self.logvar_c = nn.Parameter(torch.cat([logvar_c, logvar_c, logvar_c], dim=0), requires_grad=True)
 
-            # self.pi_c = nn.Parameter(torch.zeros(self.n_classes, device=self.device), requires_grad=False)
-            self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
-            self.mu_c = nn.init.xavier_uniform_(self.mu_c)
-            self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
-            self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
+            elif self.init_method == "batch":
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
+                self.set_mu_sig(init=True)  
+                
+            elif self.init_method == "supervised":
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/(self.n_classes*10), requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c, gain=0.001)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c, gain=0.001)
 
-            # self.set_mu_sig(init=True)    # test init first 10 clusters with real mu and sigma
-            # self.std_c = torch.exp(0.5*self.logvar_c)
+                self.set_mu_sig(init=True) 
+
         
         self.to(self.device)
             
@@ -83,13 +105,18 @@ class GIN(nn.Module):
         return x, logdet_J 
     
     def train_model(self):
-        # os.makedirs(self.save_dir)
+        try:
+            os.makedirs(self.save_dir)
+            os.makedirs(os.path.join(self.save_dir, 'model_save'))
+            os.makedirs(os.path.join(self.save_dir, 'figures'))
+        except:
+            print("Folder directories already exist.")
+
         with open(os.path.join(self.save_dir, 'log.txt'), 'w') as f:
             f.write(f'incompressible_flow {self.incompressible_flow}\n')
             f.write(f'empirical_vars {self.empirical_vars}\n')
             f.write(f'init_identity {self.init_identity}\n')
-        # os.makedirs(os.path.join(self.save_dir, 'model_save'))
-        # os.makedirs(os.path.join(self.save_dir, 'figures'))
+
         print(f'\nTraining model for {self.n_epochs} epochs \n')
         self.train()
         self.to(self.device)
@@ -124,50 +151,27 @@ class GIN(nn.Module):
                             # negative log-likelihood for gaussian in latent space
                             loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
 
-                    else:
+                    elif self.unsupervised:
                         optimizer.zero_grad()
                         data += torch.randn_like(data)*1e-2
                         data = data.to(self.device)
                         z, logdet_J = self.net(data)          # latent space variable
 
-                        # Different implementations of loss:
-
-                        # (1) implemennt p(z) as in i dont need u, as mixture model:
+                        # (1) implement p(z) as in i dont need u, as mixture model:
                         loss = - self.log_likelihood_latent_space(z)
 
-                        # (2) calculate the class probs and multiply exponential distribution with it, then take log
-                        # predicted_prob = self.predict_class_probs(z).unsqueeze(2)
-                        # mu = self.mu_c.unsqueeze(0)
-                        # var = self.logvar_c.exp().unsqueeze(0)
-                        # pi = torch.log_softmax(self.pi_c, dim=-1).exp().unsqueeze(1).unsqueeze(0)
 
-                        # print(mu.size(), var.size(), z.size(), pi.size(), predicted_prob.size())
-
-                        # loss = predicted_prob*pi/np.sqrt(2*np.pi) * 1/torch.sqrt(var) * torch.exp(- 0.5*(z.unsqueeze(1)-mu)**2/torch.exp(var))
-                        # loss = torch.sum(loss, 1)
-                        # loss = - torch.mean(loss.log(), 1)
-
-                        # do loss like N(mu_k, sig_k)/ sum(N(mu_i,sig_i)) - normalized
-                        # print(loss.size()) # batch, N_clusters, n_dim
-                        # print(loss.size()) # batch, n_dim
-                        # print(loss.size()) # Batch
-
-                        # (3) implement log likelihood, cannot learn pi_c.
-                        # loss = torch.mean(0.5*(z-self.mu)**2 * torch.exp(self.logvar_c) + 0.5*self.logvar_c , 1) - torch.log(self.pi_c) + 0.5*np.log(2*np.pi)
-                    
                     loss -= logdet_J  / self.n_dims  # is zero in GIN 
                     loss = loss.mean()
                     self.print_loss(loss.item(), batch_idx, epoch, t0)
                     losses.append(loss.item())
-                    loss.backward(retain_graph=True) #retain_graph=True
+                    loss.backward(retain_graph=True) # retain_graph=True
                     optimizer.step()
 
-            # if epoch%1 == 0:
-            #     # print("predicted prob ", predicted_prob)
-            #     # print("predicted target", self.predict_y(z))
-            #     print("logvar" , self.logvar_c)
-            #     print("mu" , self.mu_c)
-            #     print("pi" , self.pi_c)
+            if (self.init_method=="batch" or self.init_method=="supervised"):
+                if epoch in [0,1,4]:
+                    self.set_mu_sig(init=True)  
+                    print(f"Re-init Parameters with {self.init_method}.")
 
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)
@@ -272,10 +276,17 @@ class GIN(nn.Module):
                     self.sig = self.log_sig.exp().detach()
         if self.unsupervised:
             if init:
-                for i in range(10):
-                    self.mu_c.data[i] = latent[target == i].mean(0)
-                    self.logvar_c.data[i] = torch.log(latent[target == i].std(0)**2)
-                    self.pi_c.data[i] = 1/10
+                if self.init_method == "supervised":
+                    for i in range(10):
+                        self.mu_c.data[i] = latent[target == i].mean(0)
+                        self.logvar_c.data[i] = torch.log(latent[target == i].std(0)**2)
+                        self.pi_c.data[i] = 1/10
+
+                elif self.init_method == "batch":
+                    batch_len = round(len(latent)/self.n_classes)-1
+                    self.mu_c.data = torch.stack([latent[i*batch_len:(i+1)*batch_len].mean(0) for i in range(self.n_classes)]).to(self.device)
+                    self.logvar_c.data = torch.stack([torch.log(latent[i*batch_len:(i+1)*batch_len].std(0)**2) for i in range(self.n_classes)]).to(self.device)
+
             else:
                 self.mu = self.mu_c.detach()
                 self.sig = torch.exp(0.5 * self.logvar_c).detach()
