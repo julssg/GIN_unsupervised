@@ -17,9 +17,9 @@ def cca_evaluation(args, GIN, save_dir):
 
     if GIN.dataset == 'EMNIST':
         # 1: load test data set
-        batch_size = 500
+        batch_size = 1000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
-        dim = 10
+        dims = [50, 100, 200, 300, 500, 700]
 
         for batch_idx, (data, target) in enumerate(test_loader):
             if batch_idx < 1:
@@ -27,62 +27,81 @@ def cca_evaluation(args, GIN, save_dir):
     
     else:
         data_val = GIN.data.to(device)
-        dim = 10
+        dims = [10]
 
     score_values_list =[]
 
-    for i in range(num_runs):
-        for j in range(num_runs):
-            if j != i:
-                print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
-                
-                model = GIN.to(device)
-                data = torch.load(saved_models[i])
-                model.load_state_dict(data['model'])
-                model.to(device)
-                model.eval()
-
-                z, logdet_J = model.net(data_val)
-                z_ref_val = z.cpu().detach()
-
-                del model
-
-                model = GIN
-                data = torch.load(saved_models[j])
-                model.load_state_dict(data['model'])
-                model.to(device)
-                model.eval()
-                z, logdet_J = model.net(data_val)
-                z_comp_val = z.cpu().detach()
-
-                del model
-                
-                try:
-                    print(f"Fitting CCA with {dim} components....")
-                    cca = CCA(n_components=dim)
-                    cca.fit(z_ref_val, z_comp_val)
-                    print(f"Evaluating CCA with {dim} components for latent spaces....")
-                    score_val = cca.score(z_ref_val , z_comp_val)
-                    print(f"The validation score for models {i} and {j} for cca in latent space is: {score_val}")
-                    score_values_list.append(score_val)
-
-                    with open(f'{save_dir}\cca_score.csv', 'a') as csvfile:
-                        filewriter = csv.writer(csvfile, delimiter=',',
-                                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                        filewriter.writerow([saved_models[i], saved_models[j], score_val ])
-
-                    del cca
+    for dim in dims:
+        for i in range(num_runs):
+            for j in range(num_runs):
+                if j != i:
+                    print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
                     
-                except Exception as e:
-                    print(e)
-                    print("Continue with next model comparison.")
-    
-    mean_score_value = sum(score_values_list)/len(score_values_list)
+                    model = GIN.to(device)
+                    data = torch.load(saved_models[i])
+                    model.load_state_dict(data['model'])
+                    model.to(device)
+                    model.eval()
 
-    with open(f'{save_dir}\cca_score.csv', 'a') as csvfile:
-        filewriter = csv.writer(csvfile, delimiter=',',
-                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        filewriter.writerow(['mean value',' ' ,  mean_score_value ])
+                    z, logdet_J = model.net(data_val)
+                    z_ref_val = z.cpu().detach()
+
+                    del model
+
+                    model = GIN
+                    data = torch.load(saved_models[j])
+                    model.load_state_dict(data['model'])
+                    model.to(device)
+                    model.eval()
+                    z, logdet_J = model.net(data_val)
+                    z_comp_val = z.cpu().detach()
+
+                    del model
+                    # reference:
+                    try:
+                        print(f"Fitting reference CCA with {dim} components....")
+                        cca = CCA(n_components=dim)
+                        cca.fit(z_ref_val, z_ref_val)
+                        score_ref_val =  cca.score(z_ref_val , z_ref_val)
+
+                        cca = CCA(n_components=dim)
+                        cca.fit(z_comp_val, z_comp_val)
+                        score_comp_val =  cca.score(z_comp_val , z_comp_val)
+                        print(f"The reference scores for model {i} is {score_ref_val} and for {j} is {score_comp_val} ")
+
+                    except Exception as e:
+                        print(e)
+
+                    
+                    try:
+                        print(f"Fitting CCA with {dim} components....")
+                        cca = CCA(n_components=dim)
+                        cca.fit(z_ref_val, z_comp_val)
+                        print(f"Evaluating CCA with {dim} components for latent spaces....")
+                        score_val = cca.score(z_ref_val , z_comp_val)
+                        print(f"The validation score for models {i} and {j} for cca in latent space is: {score_val}")
+                        norm_score_val = score_val**2/(score_ref_val*score_comp_val)
+                        print(f"The validation score including the reference value for models {i} and {j} for cca in latent space is: {norm_score_val}")
+                        score_values_list.append(score_val)
+
+                        with open(f'{save_dir}\cca_score_{dim}.csv', 'a') as csvfile:
+                            filewriter = csv.writer(csvfile, delimiter=',',
+                                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                            
+                            filewriter.writerow([saved_models[i], saved_models[j], score_ref_val, score_comp_val, score_val, norm_score_val ])
+
+                        del cca
+                        
+                    except Exception as e:
+                        print(e)
+                        print("Continue with next model comparison.")
+        
+        mean_score_value = sum(score_values_list)/len(score_values_list)
+
+        with open(f'{save_dir}\cca_score_{dim}.csv', 'a') as csvfile:
+            filewriter = csv.writer(csvfile, delimiter=',',
+                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            filewriter.writerow(['mean value',' ' , ' ' , ' ' , mean_score_value, ' ' ])
 
 
 def load(model_init, fname, device):

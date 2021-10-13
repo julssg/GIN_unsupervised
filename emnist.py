@@ -75,9 +75,8 @@ def main():
 
                 #         model = model_init(args)
 
-                # mcc_evaluation(args, model, save_dir)
                 if args.evaluate:
-                        save_dir = os.path.join('./emnist_save/', 'many_runs', "1634108606")
+                        save_dir = os.path.join('./emnist_save/', 'many_runs', "1630500545")
                         cca_evaluation(args, model_init(args), save_dir )
 
 def save(model, fname):

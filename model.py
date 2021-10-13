@@ -128,7 +128,7 @@ class GIN(nn.Module):
         for epoch in range(self.n_epochs):
             self.epoch = epoch
             for batch_idx, (data, target) in enumerate(self.train_loader):
-                if batch_idx < 99: 
+                if batch_idx < 999: 
                     if not self.unsupervised:
                         if self.empirical_vars:
                             # first check that std will be well defined
