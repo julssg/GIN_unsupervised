@@ -94,9 +94,16 @@ class GIN(nn.Module):
                 self.mu_c = nn.init.xavier_uniform_(self.mu_c, gain=0.001)
                 self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
                 self.logvar_c = nn.init.xavier_uniform_(self.logvar_c, gain=0.001)
-
                 self.set_mu_sig(init=True) 
-
+            
+            elif self.init_method == "supervised_pretraining":
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/(self.n_classes*10), requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c, gain=0.001)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c, gain=0.001)
+                # initialize these parameters to reasonable values
+                self.set_mu_sig(init=True)
         
         self.to(self.device)
             
@@ -157,9 +164,18 @@ class GIN(nn.Module):
                         data = data.to(self.device)
                         z, logdet_J = self.net(data)          # latent space variable
 
+                        if self.init_method == "supervised_pretraining":
+                            # if True, do a pretraining for 5 epochs with supervision
+                            if epoch < 5:
+                                m = self.mu_c[target] 
+                                ls = torch.exp(0.5 * self.logvar_c[target])
+                                # negative log-likelihood for gaussian in latent space
+                                loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
                         # (1) implement p(z) as in i dont need u, as mixture model:
-                        loss = - self.log_likelihood_latent_space(z)
-
+                            else:
+                                loss = - self.log_likelihood_latent_space(z)
+                        else:
+                            loss = - self.log_likelihood_latent_space(z)
 
                     loss -= logdet_J  / self.n_dims  # is zero in GIN 
                     loss = loss.mean()

@@ -19,7 +19,7 @@ def cca_evaluation(args, GIN, save_dir):
         # 1: load test data set
         batch_size = 1000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
-        dims = [50, 100, 200, 300, 500, 700]
+        dims = [784, 700]
 
         for batch_idx, (data, target) in enumerate(test_loader):
             if batch_idx < 1:
@@ -58,19 +58,23 @@ def cca_evaluation(args, GIN, save_dir):
 
                     del model
                     # reference:
-                    try:
-                        print(f"Fitting reference CCA with {dim} components....")
-                        cca = CCA(n_components=dim)
-                        cca.fit(z_ref_val, z_ref_val)
-                        score_ref_val =  cca.score(z_ref_val , z_ref_val)
+                    if i == 0:
+                        try:
+                            print(f"Fitting reference CCA with {dim} components....")
+                            cca = CCA(n_components=dim)
+                            cca.fit(z_ref_val, z_ref_val)
+                            score_ref_val =  cca.score(z_ref_val , z_ref_val)
 
-                        cca = CCA(n_components=dim)
-                        cca.fit(z_comp_val, z_comp_val)
-                        score_comp_val =  cca.score(z_comp_val , z_comp_val)
-                        print(f"The reference scores for model {i} is {score_ref_val} and for {j} is {score_comp_val} ")
+                            cca = CCA(n_components=dim)
+                            cca.fit(z_comp_val, z_comp_val)
+                            score_comp_val =  cca.score(z_comp_val , z_comp_val)
+                            print(f"The reference scores for model {i} is {score_ref_val} and for {j} is {score_comp_val} ")
 
-                    except Exception as e:
-                        print(e)
+                        except Exception as e:
+                            print(e)
+                    else: 
+                        score_ref_val = "see above"
+                        score_comp_val = "see above"
 
                     
                     try:

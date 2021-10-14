@@ -38,7 +38,7 @@ def arg_parse():
                         help='Number of runs (default 1), if 0 selected, than only evaluation will be performed \
                                 path needs to be given in emnist.py script.')
         parser.add_argument('--init', type=str, default='xavier',
-                        help='Initialization method, can be chosen to be "batch", "supervised" or "xavier" uniform (default). Batch and supervised \
+                        help='Initialization method, can be chosen to be "batch", "supervised", "supervised_pretraining" or "xavier" uniform (default). Batch and supervised \
                                 initialization include also a re-initialization after the 1, 2 and 5th epoch.')
         parser.add_argument('--evaluate', type=int, default=0,
                     help='State whether model should be evaluated (1) or not (0, default)')
@@ -49,8 +49,8 @@ def arg_parse():
         assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'
         assert args.empirical_vars in [0,1], 'Argument should be 0 or 1'
         assert args.unsupervised in [0,1], 'Argument should be 0 or 1'
-        assert args.init in ["batch", "supervised", "xavier"] and args.unsupervised == 1, \
-                'init methods only if training unsupervised, should be in ["batch", "supervised", "xavier"]'
+        assert args.init in ["batch", "supervised", "xavier", "supervised_pretraining"] and args.unsupervised == 1, \
+                'init methods only if training unsupervised, should be in ["batch", "supervised", "xavier", "supervised_pretraining"]'
         assert args.evaluate in [0,1], 'Argument should be 0 or 1'
 
         return args
