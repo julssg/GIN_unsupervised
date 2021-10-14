@@ -97,7 +97,7 @@ class GIN(nn.Module):
                 self.set_mu_sig(init=True) 
             
             elif self.init_method == "supervised_pretraining":
-                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/(self.n_classes*10), requires_grad=True)
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/(self.n_classes*100), requires_grad=True)
                 self.mu_c = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
                 self.mu_c = nn.init.xavier_uniform_(self.mu_c, gain=0.001)
                 self.logvar_c = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
@@ -166,9 +166,9 @@ class GIN(nn.Module):
 
                         if self.init_method == "supervised_pretraining":
                             # if True, do a pretraining for 5 epochs with supervision
-                            if epoch < 5:
+                            if epoch < 10 :
                                 m = self.mu_c[target] 
-                                ls = torch.exp(0.5 * self.logvar_c[target])
+                                ls = 0.5 * self.logvar_c[target]
                                 # negative log-likelihood for gaussian in latent space
                                 loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
                         # (1) implement p(z) as in i dont need u, as mixture model:
@@ -292,10 +292,10 @@ class GIN(nn.Module):
                     self.sig = self.log_sig.exp().detach()
         if self.unsupervised:
             if init:
-                if self.init_method == "supervised":
+                if self.init_method == "supervised" or self.init_method == "supervised_pretraining":
                     for i in range(10):
                         self.mu_c.data[i] = latent[target == i].mean(0)
-                        self.logvar_c.data[i] = torch.log(latent[target == i].std(0)**2)
+                        self.logvar_c.data[i] = 2*torch.log(latent[target == i].std(0))
                         self.pi_c.data[i] = 1/10
 
                 elif self.init_method == "batch":

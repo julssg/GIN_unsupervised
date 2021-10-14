@@ -49,8 +49,12 @@ def arg_parse():
         assert args.incompressible_flow in [0,1], 'Argument should be 0 or 1'
         assert args.empirical_vars in [0,1], 'Argument should be 0 or 1'
         assert args.unsupervised in [0,1], 'Argument should be 0 or 1'
-        assert args.init in ["batch", "supervised", "xavier", "supervised_pretraining"] and args.unsupervised == 1, \
-                'init methods only if training unsupervised, should be in ["batch", "supervised", "xavier", "supervised_pretraining"]'
+        if args.unsupervised == 1:
+                assert args.init in ["batch", "supervised", "xavier", "supervised_pretraining"], \
+                        'init methods only if training unsupervised, should be in ["batch", "supervised", "xavier", "supervised_pretraining"]'
+        else:
+                assert args.init, \
+                        'init methods only if training unsupervised, should be in ["batch", "supervised", "xavier", "supervised_pretraining"]'
         assert args.evaluate in [0,1], 'Argument should be 0 or 1'
 
         return args
