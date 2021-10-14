@@ -19,7 +19,7 @@ def cca_evaluation(args, GIN, save_dir):
         # 1: load test data set
         batch_size = 1000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
-        dims = [784, 700]
+        dims = [700]
 
         for batch_idx, (data, target) in enumerate(test_loader):
             if batch_idx < 1:
