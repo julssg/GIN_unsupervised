@@ -1,0 +1,20 @@
+certifi==2021.5.30
+cycler==0.10.0
+FrEIA @ git+https://github.com/VLL-HD/FrEIA.git@4e0c6ab42b26ec6e41b1ee2abb1a8b6562752b00
+install==1.3.4
+joblib==1.0.1
+kiwisolver==1.3.1
+matplotlib==3.4.3
+numpy==1.21.2
+Pillow==8.3.1
+pyparsing==2.4.7
+python-dateutil==2.8.2
+scikit-learn==0.24.2
+scipy==1.7.1
+six==1.16.0
+threadpoolctl==2.2.0
+torch==1.9.0+cu102
+torchaudio==0.9.0
+torchvision==0.10.0+cu102
+typing-extensions==3.10.0.0
+wincertstore==0.2

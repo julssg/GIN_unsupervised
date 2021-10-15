@@ -67,19 +67,19 @@ def main():
         if args.n_runs == 1:
                 model.train_model()
         else:
-                timestamp = str(int(time()))
-                save_dir = os.path.join('./emnist_save/', 'many_runs', timestamp)
-                os.makedirs(save_dir)
+                # timestamp = str(int(time()))
+                # save_dir = os.path.join('./emnist_save/', 'many_runs', timestamp)
+                # os.makedirs(save_dir)
 
-                for run in range(args.n_runs):
-                        print(f"Starting {run+1} run:")
-                        model.train_model()
-                        save(model, os.path.join(save_dir, f'{run+1}.pt'))
+                # for run in range(args.n_runs):
+                #         print(f"Starting {run+1} run:")
+                #         model.train_model()
+                #         save(model, os.path.join(save_dir, f'{run+1}.pt'))
 
-                        model = model_init(args)
+                #         model = model_init(args)
 
                 if args.evaluate:
-                        # save_dir = os.path.join('./emnist_save/', 'many_runs', "1630500545")
+                        save_dir = os.path.join('./emnist_save/', 'many_runs', "1634235786")
                         cca_evaluation(args, model_init(args), save_dir )
 
 def save(model, fname):

@@ -4,6 +4,8 @@ import torch
 from sklearn.cross_decomposition import CCA
 from data import make_dataloader_emnist
 import csv
+import numpy as np
+from metrics import mean_corr_coef
 
 
 def cca_evaluation(args, GIN, save_dir):
@@ -17,9 +19,9 @@ def cca_evaluation(args, GIN, save_dir):
 
     if GIN.dataset == 'EMNIST':
         # 1: load test data set
-        batch_size = 1000
+        batch_size = 2000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
-        dims = [700]
+        dims = [200]
 
         for batch_idx, (data, target) in enumerate(test_loader):
             if batch_idx < 1:
@@ -57,6 +59,34 @@ def cca_evaluation(args, GIN, save_dir):
                     z_comp_val = z.cpu().detach()
 
                     del model
+
+                    # test different cca evaluation: 
+                    # z_ref_val = np.random.rand(batch_size,784)
+                    # z_comp_val = np.random.rand(batch_size,784)
+                    # print((z_ref_val[:int(batch_size/2)]).shape)
+
+                    cca_dim = dim
+                    cca = CCA(n_components=cca_dim, max_iter=500)
+                    cca.fit(z_ref_val[:int(batch_size/2)], z_comp_val[:int(batch_size/2)])
+                    res_out = cca.transform(z_ref_val[:int(batch_size/2)], z_comp_val[:int(batch_size/2)])
+                    mcc_weak_out = mean_corr_coef(res_out[0], res_out[1], method = 'spearman')
+                    res_in = cca.transform(z_ref_val[int(batch_size/2):], z_comp_val[int(batch_size/2):])
+                    mcc_weak_in = mean_corr_coef(res_in[0], res_in[1])
+                    print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
+                    print('mcc weak out: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
+
+                    cca = CCA(n_components=cca_dim, max_iter=500)
+                    cca.fit(z_comp_val[:int(batch_size/2)], z_ref_val[:int(batch_size/2)])
+                    res_out = cca.transform(z_comp_val[:int(batch_size/2)], z_ref_val[:int(batch_size/2)])
+                    mcc_weak_out = mean_corr_coef(res_out[0], res_out[1])
+                    res_in = cca.transform(z_comp_val[int(batch_size/2):], z_ref_val[int(batch_size/2):])
+                    mcc_weak_in = mean_corr_coef(res_in[0], res_in[1])
+                    print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
+                    print('mcc weak out after swapping: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
+
+
+                    exit(1)
+
                     # reference:
                     if i == 0:
                         try:
@@ -79,12 +109,16 @@ def cca_evaluation(args, GIN, save_dir):
                     
                     try:
                         print(f"Fitting CCA with {dim} components....")
-                        cca = CCA(n_components=dim)
+                        cca = CCA(n_components=dim, max_iter=5000)
                         cca.fit(z_ref_val, z_comp_val)
                         print(f"Evaluating CCA with {dim} components for latent spaces....")
                         score_val = cca.score(z_ref_val , z_comp_val)
                         print(f"The validation score for models {i} and {j} for cca in latent space is: {score_val}")
-                        norm_score_val = score_val**2/(score_ref_val*score_comp_val)
+                        try:
+                            norm_score_val = score_val**2/(score_ref_val*score_comp_val)
+                        except Exception as e:
+                            print(e)
+                            norm_score_val = None
                         print(f"The validation score including the reference value for models {i} and {j} for cca in latent space is: {norm_score_val}")
                         score_values_list.append(score_val)
 
@@ -135,5 +169,3 @@ def load(model_init, fname, device):
 #     y_permuted = np.array([permutation[k] for k in y])
 #     print("Permutation matrix", permutation)
 #     return y_permuted
-
-
