@@ -234,7 +234,7 @@ def cca_evaluation(args, GIN, save_dir):
     sns.set_theme(style="whitegrid")
     ax = sns.boxplot(x="dimension", y="mcc_value", hue="data",
                  data=df, palette="Set3")
-    plt.savefig(f'{save_dir}\mcc_vs_dim_moredata_CCA.pdf')
+    plt.savefig(f'{save_dir}\mcc_vs_dim_moredata_PCA.pdf')
                 # print(mean_cc_list)
                 # plt.plot(dims, np.array(mean_cc_list))
                 # plt.show()
