@@ -6,6 +6,7 @@ import torch
 import seaborn as sns
 import pandas as pd
 from sklearn.cross_decomposition import PLSCanonical, CCA
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from data import make_dataloader_emnist
 import csv
@@ -25,7 +26,7 @@ def cca_evaluation(args, GIN, save_dir):
 
     if GIN.dataset == 'EMNIST':
         # 1: load test data set
-        batch_size = n = 2000
+        batch_size = n = 10000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
         dims = [100, 200 , 300, 400, 500] # np.arange(10, 350, 10)
 
@@ -55,8 +56,8 @@ def cca_evaluation(args, GIN, save_dir):
     for dim in dims:
         mean_cc_list_models = []
         mean_cc_list_models_train = []
-        for i in range(num_runs):
-            for j in range(num_runs):
+        for i in range(1):
+            for j in range(3):
                 if j != i:
                 
                     print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
@@ -67,16 +68,18 @@ def cca_evaluation(args, GIN, save_dir):
                     model.to(device)
                     model.eval()
 
-                    z_ref_val = model(data_val)[0].cpu().detach() 
+                    z_ref_val = model(data_val[: n//2])[0].cpu().detach() 
+                    z_ref_test = model(data_val[ n//2 : ])[0].cpu().detach() 
 
                     del model
 
-                    model = GIN
+                    model = GIN.to(device)
                     data = torch.load(saved_models[j])
                     model.load_state_dict(data['model'])
                     model.to(device)
                     model.eval()
-                    z_comp_val = model(data_val)[0].cpu().detach()
+                    z_comp_val = model(data_val[: n//2])[0].cpu().detach()
+                    z_comp_test = model(data_val[ n//2 : ])[0].cpu().detach() 
 
                     del model
 
@@ -107,13 +110,49 @@ def cca_evaluation(args, GIN, save_dir):
                     # print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
                     # print('mcc weak out after swapping: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
 
-                    X = z_ref_val # + np.random.normal(size=784 * n).reshape((n, 784))
-                    Y = z_comp_val # z_comp_val # + np.random.normal(size=4 * n).reshape((n, 4))
+                    # X = z_ref_val # + np.random.normal(size=784 * n).reshape((n, 784))
+                    # Y = z_comp_val # z_comp_val # + np.random.normal(size=4 * n).reshape((n, 4))
 
-                    X_train = X[:n // 2]
-                    Y_train = Y[:n // 2]
-                    X_test = X[n // 2:]
-                    Y_test = Y[n // 2:]
+                    #################### Find good dim PCA ######################
+
+                    pca = PCA().fit(z_ref_val)
+
+                    plt.rcParams["figure.figsize"] = (12,6)
+
+                    fig, ax = plt.subplots()
+                    xi = np.arange(1, 11, step=1)
+                    y = np.cumsum(pca.explained_variance_ratio_)
+
+                    plt.ylim(0.0,1.1)
+                    plt.plot(xi, y, marker='o', linestyle='--', color='b')
+
+                    plt.xlabel('Number of Components')
+                    plt.xticks(np.arange(0, 11, step=1)) #change from 0-based array index to 1-based human-readable label
+                    plt.ylabel('Cumulative variance (%)')
+                    plt.title('The number of components needed to explain variance')
+
+                    plt.axhline(y=0.95, color='r', linestyle='-')
+                    plt.text(0.5, 0.85, '95% cut-off threshold', color = 'red', fontsize=16)
+
+                    ax.grid(axis='x')
+                    # plt.show()
+                    plt.savefig(f'{save_dir}\PCA_find_n.pdf')
+
+                    #################### Apply PCA ##################
+
+                    z_ref_val = PCA(n_components=dim).fit_transform(z_ref_val)
+                    z_comp_val = PCA(n_components=dim).fit_transform(z_comp_val)
+                    z_ref_test = PCA(n_components=dim).fit_transform(z_ref_test)
+                    z_comp_test = PCA(n_components=dim).fit_transform(z_comp_test)
+
+                    print(z_ref_val.shape)
+
+                    ################### Apply Identifyablity metric #
+
+                    X_train = z_ref_val
+                    Y_train = z_comp_val
+                    X_test = z_ref_test
+                    Y_test = z_comp_test
 
                     # print("Corr(X)")
                     # print(np.round(np.corrcoef(X.T), 2))
@@ -125,31 +164,39 @@ def cca_evaluation(args, GIN, save_dir):
 
                     # Transform data
                     # ~~~~~~~~~~~~~~
-                    plsca = PLSCanonical(n_components=dim, max_iter=1500)
-                    # plsca = CCA(n_components=dim)
-                    plsca.fit(X_train, Y_train)
-                    X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
-                    X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
+                    try:
+                        # plsca = PLSCanonical(n_components=dim, max_iter=2500)
+                        plsca = CCA(n_components=dim, max_iter=2500)
+                        plsca.fit(X_train, Y_train)
+                        X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
+                        X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
 
-                    # Compute Mean correlation coefficent over all components
-                    mean_cc = 0 
-                    mean_cc_train = 0 
-                    for k in range(dim):
-                        mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
-                        mean_cc_train += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
-                        # with open(f'{save_dir}\cc_per_dim_{dim}_train.csv', 'a') as csvfile:
-                        #      filewriter = csv.writer(csvfile, delimiter=',',
-                        #                              quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                            
-                        #      filewriter.writerow([k, np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]])
+                        # Compute Mean correlation coefficent over all components
+                        mean_cc = 0 
+                        mean_cc_train = 0 
+                        for k in range(dim):
+                            mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
+                            mean_cc_train += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
+                            # with open(f'{save_dir}\cc_per_dim_{dim}_train.csv', 'a') as csvfile:
+                            #      filewriter = csv.writer(csvfile, delimiter=',',
+                            #                              quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                                
+                            #      filewriter.writerow([k, np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]])
 
-                    mean_cc /= dim 
-                    mean_cc_train /= dim 
-                    mean_cc_list_models.append(mean_cc)
-                    mean_cc_list_models_train.append(mean_cc_train)
+                        mean_cc /= dim 
+                        mean_cc_train /= dim 
+                        mean_cc_list_models.append(mean_cc)
+                        mean_cc_list_models_train.append(mean_cc_train)
 
-                    df.loc[len(df.index)] = [f'{dim}', mean_cc, 'test'] 
-                    df.loc[len(df.index)] = [f'{dim}', mean_cc_train, 'val'] 
+                        df.loc[len(df.index)] = [f'{dim}', mean_cc, 'test'] 
+                        df.loc[len(df.index)] = [f'{dim}', mean_cc_train, 'val'] 
+                    except Exception as e:
+                        print(e)
+                    
+                    try:
+                        torch.cuda.empty_cache()
+                    except Exception as e:
+                        print(e) 
 
         mean_cc = np.mean(np.array(mean_cc_list_models))
         mean_cc_std = np.std(np.array(mean_cc_list_models))
@@ -187,7 +234,7 @@ def cca_evaluation(args, GIN, save_dir):
     sns.set_theme(style="whitegrid")
     ax = sns.boxplot(x="dimension", y="mcc_value", hue="data",
                  data=df, palette="Set3")
-    plt.savefig(f'{save_dir}\plot_find_good_dim.pdf')
+    plt.savefig(f'{save_dir}\mcc_vs_dim_moredata_CCA.pdf')
                 # print(mean_cc_list)
                 # plt.plot(dims, np.array(mean_cc_list))
                 # plt.show()

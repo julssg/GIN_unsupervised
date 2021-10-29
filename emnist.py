@@ -79,7 +79,7 @@ def main():
                 #         model = model_init(args)
 
                 if args.evaluate:
-                        save_dir = os.path.join('./emnist_save/', 'many_runs', "1634202542")
+                        save_dir = os.path.join('./emnist_save/', 'many_runs', "1630500545")
                         cca_evaluation(args, model_init(args), save_dir )
 
 def save(model, fname):
