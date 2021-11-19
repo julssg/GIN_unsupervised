@@ -24,7 +24,7 @@ class BasicDataset(torch.utils.data.Dataset):
         return self.data[idx], self.target[idx]
 
 
-def make_dataloader_emnist(batch_size, train=True, root_dir='./'):
+def make_dataloader_emnist(batch_size, train=True, shuffle=True, root_dir='./'):
     transform = Compose([ToTensor(),
                          Lambda(lambda x: x.view(1, 28, 28)),
                          Lambda(lambda x: x.transpose(1, 2))])
@@ -44,7 +44,7 @@ def make_dataloader_emnist(batch_size, train=True, root_dir='./'):
                 else:
                     print('Data will not be downloaded. Exiting script...')
                     quit()
-    dataloader = torch.utils.data.DataLoader(emnist, batch_size=batch_size, shuffle=True)
+    dataloader = torch.utils.data.DataLoader(emnist, batch_size=batch_size, shuffle=shuffle ) # shuffle=True
     return dataloader
     
     
