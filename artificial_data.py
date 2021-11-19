@@ -41,7 +41,7 @@ assert args.unsupervised in [0,1], 'Argument should be 0 or 1'
 assert args.init_identity in [0,1], 'Argument should be 0 or 1'
 assert args.evaluate in [0,1], 'Argument should be 0 or 1'
 
-model = GIN(dataset='10d', 
+model_origin = GIN(dataset='10d', 
             n_classes=args.n_clusters, 
             n_data_points=args.n_data_points, 
             n_epochs=args.n_epochs, 
@@ -57,28 +57,62 @@ model = GIN(dataset='10d',
 
 # save a inital version of the model, to train the model multiple times on the same artifical data set (initialization is the same)
 
-state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
-os.makedirs(os.path.join(model.save_dir, 'model_save'))
-os.makedirs(os.path.join(model.save_dir, 'figures'))
-trained_models_folder = os.path.join(model.save_dir, 'model_save', 'trained_final')
+state_dict = OrderedDict((k,v) for k,v in model_origin.state_dict().items() if not k.startswith('net.tmp_var'))
+os.makedirs(os.path.join(model_origin.save_dir, 'model_save'))
+os.makedirs(os.path.join(model_origin.save_dir, 'figures'))
+trained_models_folder = os.path.join(model_origin.save_dir, 'model_save', 'trained_final')
 os.makedirs(trained_models_folder)
-init_model_path = os.path.join(model.save_dir, 'model_save', 'init.pt')
+init_model_path = os.path.join(model_origin.save_dir, 'model_save', 'init.pt')
 torch.save({'model': state_dict}, init_model_path )
 
-for i in range(5):
+for i in range(3):
+        model = model_origin
         data = torch.load(init_model_path)
         model.load_state_dict(data['model'])
         model.to(model.device)
+        model.n_classes = 5 
+        model.initialize()   # reinit to have different seeds
         model.train_model()
-        trained_models_folder = os.path.join(model.save_dir, 'model_save', 'trained_final')
-        trained_model_path = os.path.join(trained_models_folder, f'trained_model_{i}.pt')
+        trained_models_cluster_folder = os.path.join(trained_models_folder, f"{model.n_classes}_clusters")
+        try:
+                os.makedirs(trained_models_cluster_folder)
+        except Exception as e:
+                print(e)
+        trained_model_path = os.path.join(trained_models_cluster_folder, f'trained_model_{i}.pt')
         state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
         torch.save({'model': state_dict}, trained_model_path)
+        del model
+        
 
 if args.evaluate:
-        save_dir = trained_models_folder
+        save_dir = trained_models_cluster_folder
+        cca_evaluation(args, model_origin, save_dir)
+
+for i in range(3):
+        model = model_origin
+        model.n_classes = 5
+        model.initialize() 
+        print("the dimension of parameters is:", model_origin.logvar_c.size())
+        data = torch.load(init_model_path)
+        print("the dimension of parameters is:", model.logvar_c.size())
+        model.load_state_dict(data['model'])
+        model.to(model.device)
+        model.n_classes = 1 
+        model.initialize()   # reinit to have different seeds
+        print("the dimension of parameters is:", model.logvar_c.size())
+        model.train_model()
+        trained_models_cluster_folder = os.path.join(trained_models_folder, f"{model.n_classes}_clusters")
+        try:
+                os.makedirs(trained_models_cluster_folder)
+        except Exception as e:
+                print(e)
+        trained_model_path = os.path.join(trained_models_cluster_folder, f'trained_model_{i}.pt')
+        state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
+        torch.save({'model': state_dict}, trained_model_path)
+        del model
+
+if args.evaluate:
+        model = model_origin
+        model.n_classes = 1 
+        save_dir = trained_models_cluster_folder
         cca_evaluation(args, model, save_dir)
-
-
-
-

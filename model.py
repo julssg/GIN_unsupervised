@@ -37,9 +37,9 @@ class GIN(nn.Module):
             self.net = construct_net_10d(coupling_block='gin' if self.incompressible_flow else 'glow', init_identity=init_identity)
             assert type(n_classes) is int
             self.n_classes = n_classes
-            self.n_dims = 10
+            self.n_dims = 10 
             self.save_dir = os.path.join('./artificial_data_save/', self.timestamp)
-            self.latent, self.data, self.target = generate_artificial_data_10d(self.n_classes, n_data_points)
+            self.latent, self.data, self.target = generate_artificial_data_10d( 10, n_data_points)
             self.train_loader = make_dataloader(self.data, self.target, self.batch_size)
         elif self.dataset == 'EMNIST':
             if not init_identity:
@@ -106,12 +106,59 @@ class GIN(nn.Module):
                 self.set_mu_sig(init=True)
         
         self.to(self.device)
+
+    def initialize(self):
+        if self.unsupervised:
+            print(f"Initializing the parameters with the method: {self.init_method}.")
+            if self.init_method == "xavier":
+                
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
+
+                if self.n_classes == 120:
+                    '''Test what happens when using the xavier uniform distribution of d=40 to init 120 classes.'''
+                    self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                    mu_c = nn.init.xavier_uniform_(torch.zeros(int(self.n_classes/3),self.n_dims, device=self.device))
+                    self.mu_c = nn.Parameter(torch.cat([mu_c, mu_c, mu_c], dim=0), requires_grad=True)
+                    logvar_c = nn.init.xavier_uniform_(torch.zeros(int(self.n_classes/3),self.n_dims, device=self.device))
+                    self.logvar_c = nn.Parameter(torch.cat([logvar_c, logvar_c, logvar_c], dim=0), requires_grad=True)
+
+            elif self.init_method == "batch":
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/self.n_classes, requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c)
+                self.set_mu_sig(init=True)  
+                
+            elif self.init_method == "supervised":
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/(self.n_classes*10), requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device) , requires_grad=True)
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c, gain=0.001)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes,self.n_dims, device=self.device), requires_grad=True)
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c, gain=0.001)
+                self.set_mu_sig(init=True) 
+            
+            elif self.init_method == "supervised_pretraining":
+                self.pi_c = nn.Parameter(torch.ones(self.n_classes, device=self.device)/(self.n_classes*100), requires_grad=True)
+                self.mu_c = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+                self.mu_c = nn.init.xavier_uniform_(self.mu_c, gain=0.001)
+                self.logvar_c = nn.Parameter(torch.zeros(self.n_classes, self.n_dims).to(self.device)).requires_grad_()
+                self.logvar_c = nn.init.xavier_uniform_(self.logvar_c, gain=0.001)
+                # initialize these parameters to reasonable values
+                self.set_mu_sig(init=True)
+
+
             
     def forward(self, x, rev=False):
         x, logdet_J  = self.net(x, rev=rev)
         return x, logdet_J 
     
     def train_model(self):
+        print(f"The number of used clusters is: {self.n_classes} ")
         try:
             os.makedirs(self.save_dir)
             os.makedirs(os.path.join(self.save_dir, 'model_save'))

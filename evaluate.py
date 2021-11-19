@@ -26,18 +26,19 @@ def cca_evaluation(args, GIN, save_dir):
 
     if GIN.dataset == 'EMNIST':
         # 1: load test data set
-        batch_size = n = 10000
+        batch_size = n = 15000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir)
-        dims = [100, 200 , 300, 400, 500] # np.arange(10, 350, 10)
+        dims = [20] # np.arange(5, 100, 5) #  [40, 50, 100,200,300,400,450] 
 
         for batch_idx, (data, target) in enumerate(test_loader):
             if batch_idx < 1:
                 data_val = data.to(device)
     
     else:
-        data_val = GIN.data.to(device)
         n = args.n_data_points
+        data_val = GIN.data.to(device)
         dims = [10]
+        print(f"The number of used clusters is: {GIN.n_classes} ")
 
     score_values_list =[]
     mean_cc_list = []
@@ -56,8 +57,8 @@ def cca_evaluation(args, GIN, save_dir):
     for dim in dims:
         mean_cc_list_models = []
         mean_cc_list_models_train = []
-        for i in range(1):
-            for j in range(3):
+        for i in range(num_runs):
+            for j in range(num_runs):
                 if j != i:
                 
                     print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
@@ -68,8 +69,10 @@ def cca_evaluation(args, GIN, save_dir):
                     model.to(device)
                     model.eval()
 
-                    z_ref_val = model(data_val[: n//2])[0].cpu().detach() 
-                    z_ref_test = model(data_val[ n//2 : ])[0].cpu().detach() 
+                    z_ref_val_1 = model(data_val[: n // 3 ])[0].cpu().detach() 
+                    z_ref_val_2 = model(data_val[n // 3 : int(n - n // 3) ])[0].cpu().detach() 
+                    z_ref_val = np.append(z_ref_val_1, z_ref_val_2, axis=0)
+                    z_ref_test = model(data_val[ int(n - n // 3) : ])[0].cpu().detach() 
 
                     del model
 
@@ -78,8 +81,11 @@ def cca_evaluation(args, GIN, save_dir):
                     model.load_state_dict(data['model'])
                     model.to(device)
                     model.eval()
-                    z_comp_val = model(data_val[: n//2])[0].cpu().detach()
-                    z_comp_test = model(data_val[ n//2 : ])[0].cpu().detach() 
+                    z_comp_val_1 = model(data_val[: n // 3 ])[0].cpu().detach()
+                    z_comp_val_2 = model(data_val[n // 3 : int(n - n // 3) ])[0].cpu().detach() 
+                    z_comp_val = np.append(z_comp_val_1, z_comp_val_2, axis=0)
+                    z_comp_test = model(data_val[ int(n - n // 3) : ])[0].cpu().detach()
+                    print(z_comp_val.shape) 
 
                     del model
 
@@ -115,37 +121,53 @@ def cca_evaluation(args, GIN, save_dir):
 
                     #################### Find good dim PCA ######################
 
-                    pca = PCA().fit(z_ref_val)
+                    # pca = PCA().fit(z_ref_val)
 
-                    plt.rcParams["figure.figsize"] = (12,6)
+                    # plt.rcParams["figure.figsize"] = (12,6)
 
-                    fig, ax = plt.subplots()
-                    xi = np.arange(1, 11, step=1)
-                    y = np.cumsum(pca.explained_variance_ratio_)
+                    # fig, ax = plt.subplots()
+                    # xi = np.arange(1, 785, step=1)
+                    # y = np.cumsum(pca.explained_variance_ratio_)
 
-                    plt.ylim(0.0,1.1)
-                    plt.plot(xi, y, marker='o', linestyle='--', color='b')
+                    # plt.ylim(0.0,1.1)
+                    # plt.plot(xi, y, marker='o', linestyle='--', color='b')
 
-                    plt.xlabel('Number of Components')
-                    plt.xticks(np.arange(0, 11, step=1)) #change from 0-based array index to 1-based human-readable label
-                    plt.ylabel('Cumulative variance (%)')
-                    plt.title('The number of components needed to explain variance')
+                    # plt.xlabel('Number of Components')
+                    # plt.xticks(np.arange(0, 785, step=50)) #change from 0-based array index to 1-based human-readable label
+                    # plt.ylabel('Cumulative variance (%)')
+                    # plt.title('The number of components needed to explain variance')
 
-                    plt.axhline(y=0.95, color='r', linestyle='-')
-                    plt.text(0.5, 0.85, '95% cut-off threshold', color = 'red', fontsize=16)
+                    # plt.axhline(y=0.95, color='r', linestyle='-')
+                    # plt.text(0.5, 0.85, '95% cut-off threshold', color = 'red', fontsize=16)
 
-                    ax.grid(axis='x')
-                    # plt.show()
-                    plt.savefig(f'{save_dir}\PCA_find_n.pdf')
+                    # ax.grid(axis='x')
+                    # # plt.show()
+                    # plt.savefig(f'{save_dir}\PCA_find_n.pdf')
 
                     #################### Apply PCA ##################
 
-                    z_ref_val = PCA(n_components=dim).fit_transform(z_ref_val)
-                    z_comp_val = PCA(n_components=dim).fit_transform(z_comp_val)
-                    z_ref_test = PCA(n_components=dim).fit_transform(z_ref_test)
-                    z_comp_test = PCA(n_components=dim).fit_transform(z_comp_test)
+                    if GIN.dataset == 'EMNIST':
+                        PCA_dim = 450 
 
-                    print(z_ref_val.shape)
+                        pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                        z_ref_val = pca_ref.transform(z_ref_val)
+                        z_ref_test = pca_ref.transform(z_ref_test)
+
+                        pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                        z_comp_val = pca_comp.transform(z_comp_val)
+                        z_comp_test = pca_comp.transform(z_comp_test)
+
+                        # print(z_ref_val.shape)
+
+                    else:
+                        PCA_dim = dim
+                        pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                        z_ref_val = pca_ref.transform(z_ref_val)
+                        z_ref_test = pca_ref.transform(z_ref_test)
+
+                        pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                        z_comp_val = pca_comp.transform(z_comp_val)
+                        z_comp_test = pca_comp.transform(z_comp_test)
 
                     ################### Apply Identifyablity metric #
 
@@ -165,8 +187,8 @@ def cca_evaluation(args, GIN, save_dir):
                     # Transform data
                     # ~~~~~~~~~~~~~~
                     try:
-                        # plsca = PLSCanonical(n_components=dim, max_iter=2500)
-                        plsca = CCA(n_components=dim, max_iter=2500)
+                        plsca = PLSCanonical(n_components=dim, max_iter=2500)
+                        # plsca = CCA(n_components=dim, max_iter=2500)
                         plsca.fit(X_train, Y_train)
                         X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
                         X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
@@ -233,8 +255,26 @@ def cca_evaluation(args, GIN, save_dir):
 
     sns.set_theme(style="whitegrid")
     ax = sns.boxplot(x="dimension", y="mcc_value", hue="data",
-                 data=df, palette="Set3")
-    plt.savefig(f'{save_dir}\mcc_vs_dim_moredata_PCA.pdf')
+                 data=df, palette="Set3").set(title=f'MCC - Feature reduction dim = {dim} - {GIN.dataset}') #, dodge =False
+
+    
+    if GIN.dataset == 'EMNIST':
+        try:
+            os.makedirs(f'{save_dir}\produce_experiments')
+        except Exception as e:
+            print(e) 
+        plt.savefig(f'{save_dir}\produce_experiments\informative_name.pdf')
+        ax.clear()
+
+    else:
+        try:
+            os.makedirs(f'{save_dir}\one_vs_many')
+        except Exception as e:
+            print(e) 
+        plt.savefig(f'{save_dir}\one_vs_many\MCC_values_{GIN.n_classes}_cluster.pdf')
+        ax.clear()
+
+    #plt.savefig(f'{save_dir}\produce_experiments\informative_experiments_our_metric_featuredim20.pdf')
                 # print(mean_cc_list)
                 # plt.plot(dims, np.array(mean_cc_list))
                 # plt.show()
