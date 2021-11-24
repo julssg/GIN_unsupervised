@@ -544,9 +544,9 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
             mcc_dims_list_val = np.array(mcc_dims_list_val)
             mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
 
-            plt.plot(dims, mcc_dims_list, 'b-', label=f'{method}_test')
-            plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, color='b', alpha=0.2)
-            # plt.plot(dims, mcc_dims_list_val, 'r-', label='val')
+            plt.plot(dims, mcc_dims_list, label=f'{method}_test')
+            plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
+            # plt.plot(dims, mcc_dims_list_val, label='val')
             # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
             if "PCA" in method:
                 plt.title(f'MCC stability - GLOW - Feature reduction method: {method} - PCA dim = {PCA_dim} - \n\
@@ -724,9 +724,9 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
             mcc_dims_list_val = np.array(mcc_dims_list_val)
             mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
 
-            plt.plot(dims, mcc_dims_list, 'b-', label=f'{method} - test')
-            plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, color='b', alpha=0.2)
-            # plt.plot(dims, mcc_dims_list_val, 'r-', label='val')
+            plt.plot(dims, mcc_dims_list, label=f'{method} - test')
+            plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
+            # plt.plot(dims, mcc_dims_list_val,  label='val')
             # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
             if "PCA" in method:
                 plt.title(f'MCC stability - GLOW - Feature reduction method: {method} - PCA dim = {PCA_dim} -\n \
@@ -756,7 +756,225 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                     print("Folder already exist.") 
                 plt.savefig(f'{save_dir}\stability\MCC_values_{GIN.n_classes}_cluster.pdf')
 
-    
+
+
+def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
+
+    print("############## Stability Evaluation ################")
+
+    number_stab_runs = 6
+    if GIN.dataset == 'EMNIST':
+        # dims = [25]
+        dim = 25
+        batch_sizes = [100, 500] # , 1000, 1500, 3000, 5000 ]
+        # batch_size = n = 5000
+        n_batches = 6
+        # test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
+
+    else:
+        dims = [GIN.n_dims]
+        n_batches = 5
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f)) and '.pt' in f ]
+
+    methods = ["PCA+PLSCan", "PCAfull+PLSCan", "PLSCan", "PCA+CCA", "CCA" ]
+    methods = ["PCAfull+PLSCan"]
+
+    print(f"Using models {saved_models[0]} as reference model and {saved_models[1]} model to compare with.")
+
+    for method in methods:
+
+        mcc_dims_list = [] 
+        mcc_std_dims_list = []
+
+        mcc_dims_list_val = [] 
+        mcc_std_dims_list_val = [] 
+
+        for batch_size in batch_sizes:
+            print(f"Apply Cross Validation for batch size: {batch_size}")
+            test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
+
+            z_ref_set = get_latent_space_batches(GIN, args, \
+                saved_models[0], test_loader, num_batches=n_batches, batch=cross_validation)
+            z_comp_set = get_latent_space_batches(GIN, args, \
+                saved_models[1], test_loader, num_batches=n_batches, batch=cross_validation)
+
+
+            mcc_stab_list = [] 
+            mcc_stab_list_val = [] 
+
+            # cross validation
+
+            for k in range(len(z_ref_set)):
+
+                z_ref_test = z_ref_set[k]
+                z_comp_test = z_comp_set[k]
+                z_ref_val = np.concatenate([z_ref_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
+                z_comp_val = np.concatenate([z_comp_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
+
+                # print(z_comp_val.shape)
+
+                print(method)
+
+                #################### Apply PCA ##################
+                if "PCA" in method and not "full" in method: 
+                    print("############## Apply PCA ################")
+                    if GIN.dataset == 'EMNIST':
+                        PCA_dim = 450 
+
+                        pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                        z_ref_val = pca_ref.transform(z_ref_val)
+                        z_ref_test = pca_ref.transform(z_ref_test)
+
+                        pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                        z_comp_val = pca_comp.transform(z_comp_val)
+                        z_comp_test = pca_comp.transform(z_comp_test)
+
+                        # print(z_ref_val.shape)
+
+                    else:
+                        PCA_dim = dim
+                        pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                        z_ref_val = pca_ref.transform(z_ref_val)
+                        z_ref_test = pca_ref.transform(z_ref_test)
+
+                        pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                        z_comp_val = pca_comp.transform(z_comp_val)
+                        z_comp_test = pca_comp.transform(z_comp_test)
+
+                if "PCAfull" in method: 
+                    print("############## Apply full PCA ################")
+                    if GIN.dataset == 'EMNIST':
+                        PCA_dim = 784
+
+                        pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                        z_ref_val = pca_ref.transform(z_ref_val)
+                        z_ref_test = pca_ref.transform(z_ref_test)
+
+                        pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                        z_comp_val = pca_comp.transform(z_comp_val)
+                        z_comp_test = pca_comp.transform(z_comp_test)
+
+                        # print(z_ref_val.shape)
+
+                    else:
+                        PCA_dim = dim
+                        pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                        z_ref_val = pca_ref.transform(z_ref_val)
+                        z_ref_test = pca_ref.transform(z_ref_test)
+
+                        pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                        z_comp_val = pca_comp.transform(z_comp_val)
+                        z_comp_test = pca_comp.transform(z_comp_test)
+
+                print(f"the  dimension of the latent space is: {z_ref_val.shape[1]}")
+
+                ################### Apply Identifyablity metric #
+
+                X_val = z_ref_val
+                Y_val = z_comp_val
+                X_test = z_ref_test
+                Y_test = z_comp_test
+
+                # print("Corr(X)")
+                # print(np.round(np.corrcoef(X.T), 2))
+                # print("Corr(Y)")
+                # print(np.round(np.corrcoef(Y.T), 2))
+
+                # #############################################################################
+                # Canonical (symmetric) PLS
+
+                # Transform data
+                # ~~~~~~~~~~~~~~
+                try:
+                    if "PLSCan" in method:
+                        print("############## Apply PLSCanonical ################")
+                        plsca = PLSCanonical(n_components=dim, max_iter=2500)
+                    elif "CCA" in method:
+                        print("############## Apply CCA ################")
+                        plsca = CCA(n_components=dim, max_iter=2500)
+                    else:
+                        print("ERROR: please provide a feature reduction method.")
+                        exit(1)
+
+                    plsca.fit(X_val, Y_val)
+                    X_train_r, Y_train_r = plsca.transform(X_val, Y_val)
+                    X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
+
+                    # Compute Mean correlation coefficent over all components
+                    mean_cc = 0 
+                    mean_cc_val = 0 
+                    for k in range(dim):
+                        mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
+                        mean_cc_val += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
+
+                    mean_cc /= dim 
+                    mean_cc_val /= dim 
+                    mcc_stab_list.append(mean_cc)
+                    mcc_stab_list_val.append(mean_cc_val)
+
+                except Exception as e:
+                    print(e)
+                
+                try:
+                    torch.cuda.empty_cache()
+                except Exception as e:
+                    print(e) 
+
+                print(f"The test MCC value is: {mean_cc}")
+        
+            mcc_stab = np.mean(np.array(mcc_stab_list))
+
+
+            mcc_stab  = np.mean(np.array(mcc_stab_list))
+            mcc_stab_std = np.std(np.array(mcc_stab_list))
+
+            mcc_stab_val = np.mean(np.array(mcc_stab_list_val))
+            mcc_stab_val_std = np.std(np.array(mcc_stab_list_val))
+
+            print(f"The mean correlation coefficient over serveral runs\
+                    using {dim} components on validation data is: {mcc_stab_val} +- {mcc_stab_val_std}.")
+            print(f"The mean correlation coefficient over serveral models\
+                    using {dim} components on test data is: {mcc_stab} +- {mcc_stab_std }.")
+
+            mcc_dims_list.append(mcc_stab) 
+            mcc_std_dims_list.append(mcc_stab_std)
+            
+            mcc_dims_list_val.append(mcc_stab_val)
+            mcc_std_dims_list_val.append(mcc_stab_val_std)
+        
+        mcc_dims_list = np.array(mcc_dims_list)
+        mcc_std_dims_list = np.array(mcc_std_dims_list)
+
+        mcc_dims_list_val = np.array(mcc_dims_list_val)
+        mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
+
+        plt.plot(dims, mcc_dims_list, label=f'batch_size_{batch_size}')
+        plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
+        # plt.plot(dims, mcc_dims_list_val, 'r-', label='val')
+        # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
+        if "PCA" in method:
+            plt.title(f'MCC stability on Test data - GLOW - Feature reduction method: {method} - PCA dim = {PCA_dim} - \n\
+                final dim = {dim} - Dataset {GIN.dataset} - number of batches {n_batches} -\n\
+                trained with number of clusters = {GIN.n_classes} - with cross validation = {cross_validation}', fontsize = 10)
+
+        else:
+            plt.title(f'MCC stability on Test data - GLOW - Feature reduction method: {method} - \n\
+                final dim = {dim} - Dataset {GIN.dataset} - number of batches {n_batches} -\n\
+                trained with number of clusters = {GIN.n_classes} -with cross validation = {cross_validation}', fontsize = 10)
+
+        plt.legend()
+        plt.show()
+
+        if GIN.dataset == 'EMNIST':
+            try:
+                os.makedirs(f'{save_dir}\stability_experiments')
+            except Exception as e:
+                print("Folder already exist.") 
+            plt.savefig(f'{save_dir}\stability_experiments\{method}_informative_name.pdf')
+
 
 
 def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=False, batch_size=5000, num_batches=6, val_batches=5):
