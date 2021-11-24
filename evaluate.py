@@ -766,7 +766,7 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
     if GIN.dataset == 'EMNIST':
         # dims = [25]
         dim = 25
-        batch_sizes = [100, 500] # , 1000, 1500, 3000, 5000 ]
+        batch_sizes = [200, 500, 2000 ] # , 1000, 1500, 3000, 5000 ]
         # batch_size = n = 5000
         n_batches = 6
         # test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
@@ -776,11 +776,12 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
         n_batches = 5
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(device)
 
     saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f)) and '.pt' in f ]
 
     methods = ["PCA+PLSCan", "PCAfull+PLSCan", "PLSCan", "PCA+CCA", "CCA" ]
-    methods = ["PCAfull+PLSCan"]
+    methods = ["CCA", "PLSCan", "PCAfull+PLSCan"]
 
     print(f"Using models {saved_models[0]} as reference model and {saved_models[1]} model to compare with.")
 
@@ -794,12 +795,12 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
 
         for batch_size in batch_sizes:
             print(f"Apply Cross Validation for batch size: {batch_size}")
-            test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
+            # test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
 
             z_ref_set = get_latent_space_batches(GIN, args, \
-                saved_models[0], test_loader, num_batches=n_batches, batch=cross_validation)
+                saved_models[0], batch_size=batch_size,  num_batches=n_batches, batch=cross_validation)
             z_comp_set = get_latent_space_batches(GIN, args, \
-                saved_models[1], test_loader, num_batches=n_batches, batch=cross_validation)
+                saved_models[1], batch_size=batch_size, num_batches=n_batches, batch=cross_validation)
 
 
             mcc_stab_list = [] 
@@ -869,8 +870,8 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
                         z_comp_val = pca_comp.transform(z_comp_val)
                         z_comp_test = pca_comp.transform(z_comp_test)
 
-                print(f"the  dimension of the latent space is: {z_ref_val.shape[1]}")
-
+                print(f"the dimension of the latent space is: {z_ref_val.shape[1]}")
+                print(f"the number of validation data is: {z_ref_val.shape[0]}")
                 ################### Apply Identifyablity metric #
 
                 X_val = z_ref_val
@@ -907,8 +908,11 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
                     mean_cc = 0 
                     mean_cc_val = 0 
                     for k in range(dim):
+                        # print(np.corrcoef(X_test_r[:, k], Y_test_r[:, k]))
+                        # print(np.corrcoef(X_test_r[:, k], Y_test_r[:, k]).shape)
                         mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
                         mean_cc_val += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
+                    print("the len vs dim is:", len(range(dim)), dim)
 
                     mean_cc /= dim 
                     mean_cc_val /= dim 
@@ -924,6 +928,7 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
                     print(e) 
 
                 print(f"The test MCC value is: {mean_cc}")
+                print(f"The validation MCC value is: {mean_cc_val}")
         
             mcc_stab = np.mean(np.array(mcc_stab_list))
 
@@ -951,8 +956,8 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
         mcc_dims_list_val = np.array(mcc_dims_list_val)
         mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
 
-        plt.plot(dims, mcc_dims_list, label=f'batch_size_{batch_size}')
-        plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
+        plt.plot(batch_sizes, mcc_dims_list, label=f'{method}')
+        plt.fill_between(batch_sizes, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
         # plt.plot(dims, mcc_dims_list_val, 'r-', label='val')
         # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
         if "PCA" in method:
