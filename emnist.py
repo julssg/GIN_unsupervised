@@ -82,7 +82,7 @@ def main():
                         save_dir = os.path.join('./emnist_save/', 'many_runs', "1630500545")
                         # cca_evaluation(args, model_init(args), save_dir )
                         # evaluate_stability(args, model_init(args), save_dir, cross_validation=True)
-                        (args, model_init(args), save_dir, cross_validation=True)
+                        evaluate_stability_many_data(args, model_init(args), save_dir, cross_validation=True)
 
 def save(model, fname):
         state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
