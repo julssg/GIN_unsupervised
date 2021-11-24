@@ -366,7 +366,7 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
 
     number_stab_runs = 6
     if GIN.dataset == 'EMNIST':
-        dims = np.arange(5, 110, 10) #  [40, 50, 100,200,300,400,450] 
+        dims = [25] # np.arange(5, 110, 10) #  [40, 50, 100,200,300,400,450] 
         batch_size = n = 5000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
 
