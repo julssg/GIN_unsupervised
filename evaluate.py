@@ -545,6 +545,8 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
             mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
 
             plt.plot(dims, mcc_dims_list, label=f'{method}_test')
+            plt.xlabel("final dimension")
+            plt.ylabel("MCC")
             plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
             # plt.plot(dims, mcc_dims_list_val, label='val')
             # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
@@ -725,6 +727,8 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
             mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
 
             plt.plot(dims, mcc_dims_list, label=f'{method} - test')
+            plt.xlabel("final dimension")
+            plt.ylabel("MCC")
             plt.fill_between(dims, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
             # plt.plot(dims, mcc_dims_list_val,  label='val')
             # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
@@ -766,13 +770,14 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
     if GIN.dataset == 'EMNIST':
         # dims = [25]
         dim = 25
-        batch_sizes = [200, 500, 2000 ] # , 1000, 1500, 3000, 5000 ]
+        batch_sizes = [200, 400, 600, 800, 1000, 2000, 3000, 4000, 5000 ] # , 1000, 1500, 3000, 5000 ]
         # batch_size = n = 5000
         n_batches = 6
         # test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
 
     else:
-        dims = [GIN.n_dims]
+        # dims = [GIN.n_dims]
+        dim = GIN.n_dims
         n_batches = 5
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -781,7 +786,7 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
     saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f)) and '.pt' in f ]
 
     methods = ["PCA+PLSCan", "PCAfull+PLSCan", "PLSCan", "PCA+CCA", "CCA" ]
-    methods = ["CCA", "PLSCan", "PCAfull+PLSCan"]
+    # methods = ["CCA", "PLSCan", "PCAfull+PLSCan"]
 
     print(f"Using models {saved_models[0]} as reference model and {saved_models[1]} model to compare with.")
 
@@ -957,6 +962,8 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
         mcc_std_dims_list_val = np.array(mcc_std_dims_list_val)
 
         plt.plot(batch_sizes, mcc_dims_list, label=f'{method}')
+        plt.xlabel("batch_size")
+        plt.ylabel("MCC")
         plt.fill_between(batch_sizes, mcc_dims_list - mcc_std_dims_list, mcc_dims_list + mcc_std_dims_list, alpha=0.2)
         # plt.plot(dims, mcc_dims_list_val, 'r-', label='val')
         # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
