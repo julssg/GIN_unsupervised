@@ -369,24 +369,26 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
         dims = [25] # np.arange(5, 110, 10) #  [40, 50, 100,200,300,400,450] 
         batch_size = n = 5000
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
+        methods = ["PCA+PLSCan", "PCAfull+PLSCan", "PLSCan", "PCA+CCA", "CCA" ]
 
     else:
-        dims = [GIN.n_dims]
+        # dims = [GIN.n_dims]
+        dims = np.arange(1 , GIN.n_dims+1 , 1)
+        batch_size = n = 5000
+        methods = ["PCAfull+PLSCan", "PLSCan", "PCAfull+CCA", "CCA" ]
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     saved_models = [join(save_dir, f) for f in listdir(save_dir) if isfile(join(save_dir, f)) and '.pt' in f ]
-
-    methods = ["PCA+PLSCan", "PCAfull+PLSCan", "PLSCan", "PCA+CCA", "CCA" ]
 
     print(f"Using models {saved_models[0]} as reference model and {saved_models[1]} model to compare with.")
 
 
     if cross_validation:
         z_ref_set = get_latent_space_batches(GIN, args, \
-            saved_models[0], test_loader, batch=cross_validation)
+            saved_models[0], batch=cross_validation)
         z_comp_set = get_latent_space_batches(GIN, args, \
-            saved_models[1], test_loader, batch=cross_validation)
+            saved_models[1], batch=cross_validation)
 
         for method in methods:
 
@@ -429,7 +431,7 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                             # print(z_ref_val.shape)
 
                         else:
-                            PCA_dim = dim
+                            PCA_dim = GIN.n_dims
                             pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                             z_ref_val = pca_ref.transform(z_ref_val)
                             z_ref_test = pca_ref.transform(z_ref_test)
@@ -454,7 +456,7 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                             # print(z_ref_val.shape)
 
                         else:
-                            PCA_dim = dim
+                            PCA_dim = GIN.n_dims
                             pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                             z_ref_val = pca_ref.transform(z_ref_val)
                             z_ref_test = pca_ref.transform(z_ref_test)
@@ -552,13 +554,13 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
             # plt.fill_between(dims, mcc_dims_list_val - mcc_std_dims_list_val, mcc_dims_list_val + mcc_std_dims_list_val, color='r', alpha=0.2)
             if "PCA" in method:
                 plt.title(f'MCC stability - GLOW - Feature reduction method: {method} - PCA dim = {PCA_dim} - \n\
-                    final dim = {dim} - Dataset {GIN.dataset} - number of validation data {z_comp_val.shape[0]}, test data {z_comp_test.shape[0]} -\n\
-                        trained with number of clusters = {GIN.n_classes} -with cross validation = {cross_validation}', fontsize = 10)
+                    final dim = {dim} - Dataset {GIN.dataset} - n_data {args.n_data_points} - n of val data {z_comp_val.shape[0]}, test data {z_comp_test.shape[0]} -\n\
+                        trained with number of clusters = {GIN.n_classes} -with cross validation = {cross_validation}', fontsize = 8)
 
             else:
                 plt.title(f'MCC stability - GLOW - Feature reduction method: {method} - \n\
-                    final dim = {dim} - Dataset {GIN.dataset} - number of validation data {z_comp_val.shape[0]}, test data {z_comp_test.shape[0]} -\n\
-                        trained with number of clusters = {GIN.n_classes} -with cross validation = {cross_validation}', fontsize = 10)
+                    final dim = {dim} - Dataset {GIN.dataset} - n_data {args.n_data_points} - n of val data {z_comp_val.shape[0]}, test data {z_comp_test.shape[0]} -\n\
+                        trained with number of clusters = {GIN.n_classes} -with cross validation = {cross_validation}', fontsize = 8)
 
             plt.legend()
             plt.show()
@@ -569,8 +571,14 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                 except Exception as e:
                     print("Folder already exist.") 
                 plt.savefig(f'{save_dir}\stability_experiments\{method}_informative_name.pdf')
+            
+            else:
+                try:
+                    os.makedirs(f'{save_dir}\stability_experiments')
+                except Exception as e:
+                    print("Folder already exist.") 
+                plt.savefig(f'{save_dir}\stability_experiments\{method}_informative_name.pdf')
 
-        
     else:
 
         z_ref_val, z_ref_test = get_latent_space_batches(GIN, args, \
@@ -611,7 +619,7 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                             # print(z_ref_val.shape)
 
                         else:
-                            PCA_dim = dim
+                            PCA_dim = GIN.n_dims
                             pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                             z_ref_val = pca_ref.transform(z_ref_val)
                             z_ref_test = pca_ref.transform(z_ref_test)
@@ -636,7 +644,7 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                             # print(z_ref_val.shape)
 
                         else:
-                            PCA_dim = dim
+                            PCA_dim = GIN.n_dims
                             pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                             z_ref_val = pca_ref.transform(z_ref_val)
                             z_ref_test = pca_ref.transform(z_ref_test)
@@ -841,7 +849,7 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
                         # print(z_ref_val.shape)
 
                     else:
-                        PCA_dim = dim
+                        PCA_dim = GIN.n_dims
                         pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                         z_ref_val = pca_ref.transform(z_ref_val)
                         z_ref_test = pca_ref.transform(z_ref_test)
@@ -866,7 +874,7 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
                         # print(z_ref_val.shape)
 
                     else:
-                        PCA_dim = dim
+                        PCA_dim = GIN.n_dims
                         pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                         z_ref_val = pca_ref.transform(z_ref_val)
                         z_ref_test = pca_ref.transform(z_ref_test)
@@ -988,14 +996,11 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
             plt.savefig(f'{save_dir}\stability_experiments\{method}_informative_name.pdf')
 
 
-
 def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=False, batch_size=5000, num_batches=6, val_batches=5):
 
     assert batch_size < 5001, "batch size should be not larger than 5000."
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
 
     model = GIN.to(device)
     data = torch.load(model_path)
@@ -1006,6 +1011,7 @@ def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=Fal
     # print(f"The parameters of model: {model_path} are: \n {model.pi_c} \n and \n {model.mu_c}." )
 
     if GIN.dataset == 'EMNIST':
+        test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
 
         z_set = []
         for batch_idx, (data, target) in enumerate(test_loader):
@@ -1024,18 +1030,45 @@ def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=Fal
         else:
             return z_set
 
+    # elif GIN.dataset == '10d':
+    #     n = args.n_data_points
+    #     data_val = GIN.data.to(device)
+    #     print(f"The number of used clusters is: {GIN.n_classes} ")
+
+    #     z_val_1 = model(data_val[: n // 3 ])[0].cpu().detach() 
+    #     z_val_2 = model(data_val[n // 3 : int(n - n // 3) ])[0].cpu().detach() 
+    #     z_val = np.append(z_val_1, z_val_2, axis=0)
+    #     z_test = model(data_val[ int(n - n // 3) : ])[0].cpu().detach() 
+    #     del model
+
+    #     return z_val, z_test
+
     elif GIN.dataset == '10d':
-        n = args.n_data_points
+        if batch_size*num_batches > args.n_data_points:
+            print(f"ERROR: The batch size times number of batches (= {batch_size*num_batches}) \
+                exceeds total number of datapoints (= {args.n_data_points}).\n \
+                    Abort further execution. ")
+            exit(1)
+
+        n = batch_size
         data_val = GIN.data.to(device)
         print(f"The number of used clusters is: {GIN.n_classes} ")
 
-        z_val_1 = model(data_val[: n // 3 ])[0].cpu().detach() 
-        z_val_2 = model(data_val[n // 3 : int(n - n // 3) ])[0].cpu().detach() 
-        z_val = np.append(z_val_1, z_val_2, axis=0)
-        z_test = model(data_val[ int(n - n // 3) : ])[0].cpu().detach() 
+        z_set = []
+        for i in range(num_batches):
+            data = data_val[i*batch_size: (i+1)*batch_size ]
+            z_batch = model(data.to(device))[0].cpu().detach() 
+            z_set.append(z_batch)
+        
         del model
 
-        return z_val, z_test
+        if not batch:
+            z_val = np.concatenate(z_set[:(val_batches-1)], axis=0)
+            z_test = np.concatenate(z_set[(val_batches-1):], axis=0)
+            return z_val, z_test
+        else:
+            return z_set
+
         
     else:
         print("ERROR: please use a valid dataset.")

@@ -3,7 +3,7 @@ import torch
 import os
 from collections import OrderedDict
 from model import GIN
-from evaluate import cca_evaluation
+from evaluate import cca_evaluation, evaluate_stability
 
 parser = argparse.ArgumentParser(description='Artificial data experiments (2d data embedded in 10d) with GIN.')
 parser.add_argument('--n_clusters', type=int, default=5,
@@ -65,7 +65,7 @@ os.makedirs(trained_models_folder)
 init_model_path = os.path.join(model_origin.save_dir, 'model_save', 'init.pt')
 torch.save({'model': state_dict}, init_model_path )
 
-for i in range(3):
+for i in range(2):
         model = model_origin
         data = torch.load(init_model_path)
         model.load_state_dict(data['model'])
@@ -86,33 +86,34 @@ for i in range(3):
 
 if args.evaluate:
         save_dir = trained_models_cluster_folder
-        cca_evaluation(args, model_origin, save_dir)
+        # cca_evaluation(args, model_origin, save_dir)
+        evaluate_stability(args, model_origin, save_dir, cross_validation=True)
 
-for i in range(3):
-        model = model_origin
-        model.n_classes = 5
-        model.initialize() 
-        print("the dimension of parameters is:", model_origin.logvar_c.size())
-        data = torch.load(init_model_path)
-        print("the dimension of parameters is:", model.logvar_c.size())
-        model.load_state_dict(data['model'])
-        model.to(model.device)
-        model.n_classes = 1 
-        model.initialize()   # reinit to have different seeds
-        print("the dimension of parameters is:", model.logvar_c.size())
-        model.train_model()
-        trained_models_cluster_folder = os.path.join(trained_models_folder, f"{model.n_classes}_clusters")
-        try:
-                os.makedirs(trained_models_cluster_folder)
-        except Exception as e:
-                print(e)
-        trained_model_path = os.path.join(trained_models_cluster_folder, f'trained_model_{i}.pt')
-        state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
-        torch.save({'model': state_dict}, trained_model_path)
-        del model
+# for i in range(3):
+#         model = model_origin
+#         model.n_classes = 5
+#         model.initialize() 
+#         print("the dimension of parameters is:", model_origin.logvar_c.size())
+#         data = torch.load(init_model_path)
+#         print("the dimension of parameters is:", model.logvar_c.size())
+#         model.load_state_dict(data['model'])
+#         model.to(model.device)
+#         model.n_classes = 1 
+#         model.initialize()   # reinit to have different seeds
+#         print("the dimension of parameters is:", model.logvar_c.size())
+#         model.train_model()
+#         trained_models_cluster_folder = os.path.join(trained_models_folder, f"{model.n_classes}_clusters")
+#         try:
+#                 os.makedirs(trained_models_cluster_folder)
+#         except Exception as e:
+#                 print(e)
+#         trained_model_path = os.path.join(trained_models_cluster_folder, f'trained_model_{i}.pt')
+#         state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
+#         torch.save({'model': state_dict}, trained_model_path)
+#         del model
 
-if args.evaluate:
-        model = model_origin
-        model.n_classes = 1 
-        save_dir = trained_models_cluster_folder
-        cca_evaluation(args, model, save_dir)
+# if args.evaluate:
+#         model = model_origin
+#         model.n_classes = 1 
+#         save_dir = trained_models_cluster_folder
+#         cca_evaluation(args, model, save_dir)
