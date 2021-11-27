@@ -375,7 +375,7 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
         # dims = [GIN.n_dims]
         dims = np.arange(1 , GIN.n_dims+1 , 1)
         batch_size = n = 5000
-        methods = ["PCAfull+PLSCan", "PLSCan", "PCAfull+CCA", "CCA" ]
+        methods = ["PCAfull+PLSCan",  "PCAfull+CCA", "CCA" , "PLSCan"]   # "PLSCan",
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
