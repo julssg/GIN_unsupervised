@@ -43,7 +43,8 @@ def cca_evaluation(args, GIN, save_dir):
         n = args.n_data_points
         data_val = GIN.data.to(device)
         test_loader = None 
-        dims = [10]
+        # dims = [10]
+        dims = np.arange(1 , GIN.n_dims+1 , 1)
         print(f"The number of used clusters is: {GIN.n_classes} ")
 
     score_values_list =[]
@@ -70,9 +71,9 @@ def cca_evaluation(args, GIN, save_dir):
                     print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
             
                     z_ref_val, z_ref_test = get_latent_space_batches(GIN, args, \
-                        saved_models[0], test_loader, batch=False)
+                        saved_models[i], test_loader, batch=False)
                     z_comp_val, z_comp_test = get_latent_space_batches(GIN, args, \
-                        saved_models[1], test_loader, batch=False)
+                        saved_models[j], test_loader, batch=False)
 
 
                     # mean_cc_list = []
@@ -146,7 +147,7 @@ def cca_evaluation(args, GIN, save_dir):
                             # print(z_ref_val.shape)
 
                         else:
-                            PCA_dim = dim
+                            PCA_dim = GIN.n_dims
                             pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
                             z_ref_val = pca_ref.transform(z_ref_val)
                             z_ref_test = pca_ref.transform(z_ref_test)
