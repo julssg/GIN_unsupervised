@@ -15,7 +15,7 @@ import numpy as np
 from metrics import mean_corr_coef
 
 
-def cca_evaluation(args, GIN, save_dir):
+def cca_evaluation(args, GIN, save_dir, n_data_points=None ):
 
     print("############## Cross Model Identifiability Evaluation ################")
 
@@ -26,13 +26,13 @@ def cca_evaluation(args, GIN, save_dir):
     num_runs = len(saved_models)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    methods = ["PCA+PLSCan", "PLSCan", "CCA" ]
+    methods = ["PCAfull+PLSCan", "PLSCan", "CCA" ]
     method = methods[0]
 
     if GIN.dataset == 'EMNIST':
         # 1: load test data set
-        # batch_size = n = 5000
-        # test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
+        batch_size = n = 5000
+        test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
         dims = [20] # np.arange(5, 100, 5) #  [40, 50, 100,200,300,400,450] 
 
         for batch_idx, (data, target) in enumerate(test_loader):
@@ -40,213 +40,212 @@ def cca_evaluation(args, GIN, save_dir):
                 data_val = data.to(device)
     
     else:
-        n = args.n_data_points
+        n = n_data_points # args.n_data_points
+        val_batches = 2
+        num_batches = 3
+        batch_size = int(n/num_batches)
         data_val = GIN.data.to(device)
         test_loader = None 
         # dims = [10]
-        dims = np.arange(1 , GIN.n_dims+1 , 1)
+        dims = [5, 10] # np.arange(1 , GIN.n_dims+1 , 1)
         print(f"The number of used clusters is: {GIN.n_classes} ")
 
-    score_values_list =[]
-    mean_cc_list = []
-    mean_cc_list_train = []
-
-    mean_cc_std_list = []
-    mean_cc_std_list_train = []
 
     dict = {'dimension':[],
         'mcc_value':[],
-        'data':[]
+        'data':[],
+        'n_data_points':[],
+        'method':[]
        }
   
     df = pd.DataFrame(dict)
-
-    for dim in dims:
-        mean_cc_list_models = []
-        mean_cc_list_models_train = []
-        for i in range(num_runs):
-            for j in range(num_runs):
-                if (j != i) and (j>i) :
+    for method in methods:
+        for dim in dims:
+            mean_cc_list_models = []
+            mean_cc_list_models_train = []
+            for i in range(num_runs):
+                for j in range(num_runs):
+                    if (j != i) and (j>i) :
+                    
+                        print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
                 
-                    print(f"Using models {saved_models[i]} as reference model and {saved_models[j]} model to compare with.")
-            
-                    z_ref_val, z_ref_test = get_latent_space_batches(GIN, args, \
-                        saved_models[i], test_loader, batch=False)
-                    z_comp_val, z_comp_test = get_latent_space_batches(GIN, args, \
-                        saved_models[j], test_loader, batch=False)
+                        z_ref_val, z_ref_test = get_latent_space_batches(GIN, args, \
+                            saved_models[i], test_loader, batch=False, batch_size=batch_size, num_batches=num_batches, val_batches=val_batches)
+                        z_comp_val, z_comp_test = get_latent_space_batches(GIN, args, \
+                            saved_models[j], test_loader, batch=False, batch_size=batch_size, num_batches=num_batches, val_batches=val_batches)
 
+                        print("the shape of latent space data is", z_ref_val.shape, z_ref_test.shape)
+                        # mean_cc_list = []
 
-                    # mean_cc_list = []
+                    # for dim in dims:
+                        # test different cca evaluation: 
+                        # z_ref_val = np.random.rand(batch_size,784)
+                        # z_comp_val = np.random.rand(batch_size,784)
+                        # print((z_ref_val[:int(batch_size/2)]).shape)
 
-                # for dim in dims:
-                    # test different cca evaluation: 
-                    # z_ref_val = np.random.rand(batch_size,784)
-                    # z_comp_val = np.random.rand(batch_size,784)
-                    # print((z_ref_val[:int(batch_size/2)]).shape)
+                        # cca_dim = dim
+                        # cca = CCA(n_components=cca_dim, max_iter=500)
+                        # cca.fit(z_ref_val[:int(batch_size/2)], z_comp_val[:int(batch_size/2)])
+                        # res_out = cca.transform(z_ref_val[:int(batch_size/2)], z_comp_val[:int(batch_size/2)])
+                        # mcc_weak_out = mean_corr_coef(res_out[0], res_out[1], method = 'spearman')
+                        # res_in = cca.transform(z_ref_val[int(batch_size/2):], z_comp_val[int(batch_size/2):])
+                        # mcc_weak_in = mean_corr_coef(res_in[0], res_in[1])
+                        # print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
+                        # print('mcc weak out: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
 
-                    # cca_dim = dim
-                    # cca = CCA(n_components=cca_dim, max_iter=500)
-                    # cca.fit(z_ref_val[:int(batch_size/2)], z_comp_val[:int(batch_size/2)])
-                    # res_out = cca.transform(z_ref_val[:int(batch_size/2)], z_comp_val[:int(batch_size/2)])
-                    # mcc_weak_out = mean_corr_coef(res_out[0], res_out[1], method = 'spearman')
-                    # res_in = cca.transform(z_ref_val[int(batch_size/2):], z_comp_val[int(batch_size/2):])
-                    # mcc_weak_in = mean_corr_coef(res_in[0], res_in[1])
-                    # print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
-                    # print('mcc weak out: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
+                        # cca = CCA(n_components=cca_dim, max_iter=500)
+                        # cca.fit(z_comp_val[:int(batch_size/2)], z_ref_val[:int(batch_size/2)])
+                        # res_out = cca.transform(z_comp_val[:int(batch_size/2)], z_ref_val[:int(batch_size/2)])
+                        # mcc_weak_out = mean_corr_coef(res_out[0], res_out[1])
+                        # res_in = cca.transform(z_comp_val[int(batch_size/2):], z_ref_val[int(batch_size/2):])
+                        # mcc_weak_in = mean_corr_coef(res_in[0], res_in[1])
+                        # print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
+                        # print('mcc weak out after swapping: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
 
-                    # cca = CCA(n_components=cca_dim, max_iter=500)
-                    # cca.fit(z_comp_val[:int(batch_size/2)], z_ref_val[:int(batch_size/2)])
-                    # res_out = cca.transform(z_comp_val[:int(batch_size/2)], z_ref_val[:int(batch_size/2)])
-                    # mcc_weak_out = mean_corr_coef(res_out[0], res_out[1])
-                    # res_in = cca.transform(z_comp_val[int(batch_size/2):], z_ref_val[int(batch_size/2):])
-                    # mcc_weak_in = mean_corr_coef(res_in[0], res_in[1])
-                    # print('mcc weak in: ', mcc_weak_in, ' --- ccadim = ', cca_dim)
-                    # print('mcc weak out after swapping: ', mcc_weak_out, ' --- ccadim = ', cca_dim)
+                        # X = z_ref_val # + np.random.normal(size=784 * n).reshape((n, 784))
+                        # Y = z_comp_val # z_comp_val # + np.random.normal(size=4 * n).reshape((n, 4))
 
-                    # X = z_ref_val # + np.random.normal(size=784 * n).reshape((n, 784))
-                    # Y = z_comp_val # z_comp_val # + np.random.normal(size=4 * n).reshape((n, 4))
+                        #################### Find good dim PCA ######################
 
-                    #################### Find good dim PCA ######################
+                        # pca = PCA().fit(z_ref_val)
 
-                    # pca = PCA().fit(z_ref_val)
+                        # plt.rcParams["figure.figsize"] = (12,6)
 
-                    # plt.rcParams["figure.figsize"] = (12,6)
+                        # fig, ax = plt.subplots()
+                        # xi = np.arange(1, 785, step=1)
+                        # y = np.cumsum(pca.explained_variance_ratio_)
 
-                    # fig, ax = plt.subplots()
-                    # xi = np.arange(1, 785, step=1)
-                    # y = np.cumsum(pca.explained_variance_ratio_)
+                        # plt.ylim(0.0,1.1)
+                        # plt.plot(xi, y, marker='o', linestyle='--', color='b')
 
-                    # plt.ylim(0.0,1.1)
-                    # plt.plot(xi, y, marker='o', linestyle='--', color='b')
+                        # plt.xlabel('Number of Components')
+                        # plt.xticks(np.arange(0, 785, step=50)) #change from 0-based array index to 1-based human-readable label
+                        # plt.ylabel('Cumulative variance (%)')
+                        # plt.title('The number of components needed to explain variance')
 
-                    # plt.xlabel('Number of Components')
-                    # plt.xticks(np.arange(0, 785, step=50)) #change from 0-based array index to 1-based human-readable label
-                    # plt.ylabel('Cumulative variance (%)')
-                    # plt.title('The number of components needed to explain variance')
+                        # plt.axhline(y=0.95, color='r', linestyle='-')
+                        # plt.text(0.5, 0.85, '95% cut-off threshold', color = 'red', fontsize=16)
 
-                    # plt.axhline(y=0.95, color='r', linestyle='-')
-                    # plt.text(0.5, 0.85, '95% cut-off threshold', color = 'red', fontsize=16)
+                        # ax.grid(axis='x')
+                        # # plt.show()
+                        # plt.savefig(f'{save_dir}\PCA_find_n.pdf')
 
-                    # ax.grid(axis='x')
-                    # # plt.show()
-                    # plt.savefig(f'{save_dir}\PCA_find_n.pdf')
+                        #################### Apply PCA ##################
+                        if "PCA" in method: 
+                            if GIN.dataset == 'EMNIST':
+                                PCA_dim = 450 
 
-                    #################### Apply PCA ##################
-                    if "PCA" in method: 
-                        if GIN.dataset == 'EMNIST':
-                            PCA_dim = 450 
+                                pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                                z_ref_val = pca_ref.transform(z_ref_val)
+                                z_ref_test = pca_ref.transform(z_ref_test)
 
-                            pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
-                            z_ref_val = pca_ref.transform(z_ref_val)
-                            z_ref_test = pca_ref.transform(z_ref_test)
+                                pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                                z_comp_val = pca_comp.transform(z_comp_val)
+                                z_comp_test = pca_comp.transform(z_comp_test)
 
-                            pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
-                            z_comp_val = pca_comp.transform(z_comp_val)
-                            z_comp_test = pca_comp.transform(z_comp_test)
+                                # print(z_ref_val.shape)
 
-                            # print(z_ref_val.shape)
+                            else:
+                                PCA_dim = GIN.n_dims
+                                pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
+                                z_ref_val = pca_ref.transform(z_ref_val)
+                                z_ref_test = pca_ref.transform(z_ref_test)
 
+                                pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
+                                z_comp_val = pca_comp.transform(z_comp_val)
+                                z_comp_test = pca_comp.transform(z_comp_test)
+
+                        ################### Apply Identifyablity metric #
+
+                        X_train = z_ref_val
+                        Y_train = z_comp_val
+                        X_test = z_ref_test
+                        Y_test = z_comp_test
+
+                        # print("Corr(X)")
+                        # print(np.round(np.corrcoef(X.T), 2))
+                        # print("Corr(Y)")
+                        # print(np.round(np.corrcoef(Y.T), 2))
+
+                        # #############################################################################
+                        # Canonical (symmetric) PLS
+
+                        # Transform data
+                        # ~~~~~~~~~~~~~~
+                        if "PLSCan" in method:
+                            try:
+                                plsca = PLSCanonical(n_components=dim, max_iter=2500)
+                                plsca.fit(X_train, Y_train)
+                                X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
+                                X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
+
+                                # Compute Mean correlation coefficent over all components
+                                mean_cc = 0 
+                                mean_cc_train = 0 
+                                for k in range(dim):
+                                    mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
+                                    mean_cc_train += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
+    
+                                mean_cc /= dim 
+                                mean_cc_train /= dim 
+                                mean_cc_list_models.append(mean_cc)
+                                mean_cc_list_models_train.append(mean_cc_train)
+
+                                df.loc[len(df.index)] = [f'{dim}', mean_cc, 'test', f'{int(n_data_points/1000)} k', method] 
+                                df.loc[len(df.index)] = [f'{dim}', mean_cc_train, 'val', f'{int(n_data_points/1000)} k', method] 
+                            except Exception as e:
+                                print(e)
+                        
+                        elif "CCA" in method:
+                            try:
+                                plsca = CCA(n_components=dim, max_iter=2500)
+                                plsca.fit(X_train, Y_train)
+                                X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
+                                X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
+
+                                # Compute Mean correlation coefficent over all components
+                                mean_cc = 0 
+                                mean_cc_train = 0 
+                                for k in range(dim):
+                                    mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
+                                    mean_cc_train += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
+                                    # with open(f'{save_dir}\cc_per_dim_{dim}_train.csv', 'a') as csvfile:
+                                    #      filewriter = csv.writer(csvfile, delimiter=',',
+                                    #                              quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                                        
+                                    #      filewriter.writerow([k, np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]])
+
+                                mean_cc /= dim 
+                                mean_cc_train /= dim 
+                                mean_cc_list_models.append(mean_cc)
+                                mean_cc_list_models_train.append(mean_cc_train)
+
+                                df.loc[len(df.index)] = [f'{dim}', mean_cc, 'test', f'{int(n_data_points/1000)} k', method] 
+                                df.loc[len(df.index)] = [f'{dim}', mean_cc_train, 'val',  f'{int(n_data_points/1000)} k', method] 
+                            except Exception as e:
+                                print(e)
+                        
                         else:
-                            PCA_dim = GIN.n_dims
-                            pca_ref = PCA(n_components=PCA_dim).fit(z_ref_val)
-                            z_ref_val = pca_ref.transform(z_ref_val)
-                            z_ref_test = pca_ref.transform(z_ref_test)
-
-                            pca_comp = PCA(n_components=PCA_dim).fit(z_comp_val)
-                            z_comp_val = pca_comp.transform(z_comp_val)
-                            z_comp_test = pca_comp.transform(z_comp_test)
-
-                    ################### Apply Identifyablity metric #
-
-                    X_train = z_ref_val
-                    Y_train = z_comp_val
-                    X_test = z_ref_test
-                    Y_test = z_comp_test
-
-                    # print("Corr(X)")
-                    # print(np.round(np.corrcoef(X.T), 2))
-                    # print("Corr(Y)")
-                    # print(np.round(np.corrcoef(Y.T), 2))
-
-                    # #############################################################################
-                    # Canonical (symmetric) PLS
-
-                    # Transform data
-                    # ~~~~~~~~~~~~~~
-                    if "PLSCan" in method:
+                            print("ERROR: please provide a feature reduction method.")
+                            exit(1)
+                        
                         try:
-                            plsca = PLSCanonical(n_components=dim, max_iter=2500)
-                            plsca.fit(X_train, Y_train)
-                            X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
-                            X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
-
-                            # Compute Mean correlation coefficent over all components
-                            mean_cc = 0 
-                            mean_cc_train = 0 
-                            for k in range(dim):
-                                mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
-                                mean_cc_train += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
- 
-                            mean_cc /= dim 
-                            mean_cc_train /= dim 
-                            mean_cc_list_models.append(mean_cc)
-                            mean_cc_list_models_train.append(mean_cc_train)
-
-                            df.loc[len(df.index)] = [f'{dim}', mean_cc, 'test'] 
-                            df.loc[len(df.index)] = [f'{dim}', mean_cc_train, 'val'] 
+                            torch.cuda.empty_cache()
                         except Exception as e:
-                            print(e)
-                    
-                    elif "CCA" in method:
-                        try:
-                            plsca = CCA(n_components=dim, max_iter=2500)
-                            plsca.fit(X_train, Y_train)
-                            X_train_r, Y_train_r = plsca.transform(X_train, Y_train)
-                            X_test_r, Y_test_r = plsca.transform(X_test, Y_test)
+                            print(e) 
 
-                            # Compute Mean correlation coefficent over all components
-                            mean_cc = 0 
-                            mean_cc_train = 0 
-                            for k in range(dim):
-                                mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
-                                mean_cc_train += np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]
-                                # with open(f'{save_dir}\cc_per_dim_{dim}_train.csv', 'a') as csvfile:
-                                #      filewriter = csv.writer(csvfile, delimiter=',',
-                                #                              quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                                    
-                                #      filewriter.writerow([k, np.corrcoef(X_train_r[:, k], Y_train_r[:, k])[0, 1]])
+                        print(f"The test MCC value is: {mean_cc}")
 
-                            mean_cc /= dim 
-                            mean_cc_train /= dim 
-                            mean_cc_list_models.append(mean_cc)
-                            mean_cc_list_models_train.append(mean_cc_train)
+            mean_cc = np.mean(np.array(mean_cc_list_models))
+            mean_cc_std = np.std(np.array(mean_cc_list_models))
 
-                            df.loc[len(df.index)] = [f'{dim}', mean_cc, 'test'] 
-                            df.loc[len(df.index)] = [f'{dim}', mean_cc_train, 'val'] 
-                        except Exception as e:
-                            print(e)
-                    
-                    else:
-                        print("ERROR: please provide a feature reduction method.")
-                        exit(1)
-                    
-                    try:
-                        torch.cuda.empty_cache()
-                    except Exception as e:
-                        print(e) 
+            mean_cc_train = np.mean(np.array(mean_cc_list_models_train))
+            mean_cc_train_std = np.std(np.array(mean_cc_list_models_train))
 
-                    print(f"The test MCC value is: {mean_cc}")
-
-        mean_cc = np.mean(np.array(mean_cc_list_models))
-        mean_cc_std = np.std(np.array(mean_cc_list_models))
-
-        mean_cc_train = np.mean(np.array(mean_cc_list_models_train))
-        mean_cc_train_std = np.std(np.array(mean_cc_list_models_train))
-
-        print(f"The mean correlation coefficient over serveral models\
-             using {dim} components on validation data is: {mean_cc_train} +- {mean_cc_train_std}.")
-        print(f"The mean correlation coefficient over serveral models\
-             using {dim} components on test data is: {mean_cc} +- {mean_cc_std}.")
+            print(f"The mean correlation coefficient over serveral models\
+                using {dim} components an method {method} on validation data is: {mean_cc_train} +- {mean_cc_train_std}.")
+            print(f"The mean correlation coefficient over serveral models\
+                using {dim} components an method {method}  on test data is: {mean_cc} +- {mean_cc_std}.")
 
                     # plsca = PLSCanonical(n_components=dim)
                     # # plsca = CCA(n_components=784)
@@ -262,13 +261,6 @@ def cca_evaluation(args, GIN, save_dir):
                     #     mean_cc += np.corrcoef(X_test_r[:, k], Y_test_r[:, k])[0, 1]
                     # mean_cc /= dim 
                     # print(f"The mean correlation coefficient using {dim} components, X and Y swaped, is: {mean_cc}.")
-                    
-        mean_cc_list.append(mean_cc)
-        mean_cc_list_train.append(mean_cc_train)
-
-        mean_cc_std_list.append(mean_cc_std)
-        mean_cc_std_list_train.append(mean_cc_train_std)
-
 
     sns.set_theme(style="whitegrid")
 
@@ -289,15 +281,17 @@ def cca_evaluation(args, GIN, save_dir):
         except Exception as e:
             print(e) 
         plt.savefig(f'{save_dir}\produce_experiments\informative_name.pdf')
-        ax.clear()
+
 
     else:
         try:
             os.makedirs(f'{save_dir}\one_vs_many')
         except Exception as e:
             print(e) 
-        plt.savefig(f'{save_dir}\one_vs_many\MCC_values_{GIN.n_classes}_cluster.pdf')
-        ax.clear()
+        plt.savefig(f'{save_dir}\one_vs_many\MCC_values_{GIN.n_classes}_cluster_{n}.pdf')
+    
+    return df
+ 
 
     #plt.savefig(f'{save_dir}\produce_experiments\informative_experiments_our_metric_featuredim20.pdf')
                 # print(mean_cc_list)
@@ -373,10 +367,11 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
         methods = ["PCA+PLSCan", "PCAfull+PLSCan", "PLSCan", "PCA+CCA", "CCA" ]
 
     else:
-        # dims = [GIN.n_dims]
+        # dims = [GIN.n_dims] 
+        test_loader = None
         dims = np.arange(1 , GIN.n_dims+1 , 1)
         batch_size = n = 5000
-        methods = ["PCAfull+PLSCan",  "PCAfull+CCA", "CCA" , "PLSCan"]   # "PLSCan",
+        methods = ["PCAfull+PLSCan",  "PCAfull+CCA", "CCA" , "PLSCan+center", "PLSCan"]   # "PLSCan",
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -386,10 +381,16 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
 
 
     if cross_validation:
+    #    ' z_ref_set = get_latent_space_batches(GIN, args, \
+    #         saved_models[0], batch=cross_validation)
+    #     z_comp_set = get_latent_space_batches(GIN, args, \
+    #         saved_models[1], batch=cross_validation)'
+        
         z_ref_set = get_latent_space_batches(GIN, args, \
-            saved_models[0], batch=cross_validation)
+            saved_models[0], test_loader, batch=True, batch_size=batch_size, num_batches=5, val_batches=4)
         z_comp_set = get_latent_space_batches(GIN, args, \
-            saved_models[1], batch=cross_validation)
+            saved_models[1], test_loader, batch=True, batch_size=batch_size, num_batches=5, val_batches=4)
+
 
         for method in methods:
 
@@ -411,11 +412,17 @@ def evaluate_stability(args, GIN, save_dir, cross_validation=False):
                     z_ref_val = np.concatenate([z_ref_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
                     z_comp_val = np.concatenate([z_comp_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
 
-                    # print(z_comp_val.shape)
+                    print(z_comp_val.shape)
 
                     print(method)
 
                     #################### Apply PCA ##################
+                    if "center" in method:
+                        z_ref_val = z_ref_val - z_ref_val.mean(axis=0)
+                        z_ref_test = z_ref_test - z_ref_test.mean(axis=0)
+                        z_comp_val =  z_comp_val -  z_comp_val.mean(axis=0)
+                        z_comp_test = z_comp_test - z_comp_test.mean(axis=0)
+
                     if "PCA" in method and not "full" in method: 
                         print("############## Apply PCA ################")
                         if GIN.dataset == 'EMNIST':
@@ -999,7 +1006,6 @@ def evaluate_stability_many_data(args, GIN, save_dir, cross_validation=False):
 
 def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=False, batch_size=5000, num_batches=6, val_batches=5):
 
-    assert batch_size < 5001, "batch size should be not larger than 5000."
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -1012,6 +1018,8 @@ def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=Fal
     # print(f"The parameters of model: {model_path} are: \n {model.pi_c} \n and \n {model.mu_c}." )
 
     if GIN.dataset == 'EMNIST':
+        assert batch_size < 5001, "batch size should be not larger than 5000."
+
         test_loader  = make_dataloader_emnist(batch_size=batch_size, train=False, root_dir=args.data_root_dir, shuffle=False)
 
         z_set = []
@@ -1061,6 +1069,7 @@ def get_latent_space_batches(GIN, args, model_path, test_loader=None , batch=Fal
             z_batch = model(data.to(device))[0].cpu().detach() 
             z_set.append(z_batch)
         
+        print(z_set)
         del model
 
         if not batch:

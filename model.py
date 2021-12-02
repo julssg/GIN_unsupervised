@@ -39,7 +39,8 @@ class GIN(nn.Module):
             self.n_classes = n_classes
             self.n_dims = 10 
             self.save_dir = os.path.join('./artificial_data_save/', self.timestamp)
-            self.latent, self.data, self.target = generate_artificial_data_10d( 10, n_data_points)
+            self.latent_means_true, self.latent_stds_true = generate_artificial_data_10d_distribution(self.n_classes)
+            self.latent, self.data, self.target = generate_artificial_data_10d( self.n_classes, n_data_points, self.latent_means_true, self.latent_stds_true)
             self.train_loader = make_dataloader(self.data, self.target, self.batch_size)
         elif self.dataset == 'EMNIST':
             if not init_identity:
@@ -157,7 +158,7 @@ class GIN(nn.Module):
         x, logdet_J  = self.net(x, rev=rev)
         return x, logdet_J 
     
-    def train_model(self):
+    def train_model(self, return_loss=False):
         print(f"The number of used clusters is: {self.n_classes} ")
         try:
             os.makedirs(self.save_dir)
@@ -182,54 +183,53 @@ class GIN(nn.Module):
         for epoch in range(self.n_epochs):
             self.epoch = epoch
             for batch_idx, (data, target) in enumerate(self.train_loader):
-                if batch_idx < 999: 
-                    if not self.unsupervised:
-                        if self.empirical_vars:
-                            # first check that std will be well defined
-                            if min([sum(target==i).item() for i in range(self.n_classes)]) < 2:
-                                # don't calculate loss and update weights -- it will give nan or error
-                                # go to next batch
-                                continue
-                        optimizer.zero_grad()
-                        data += torch.randn_like(data)*1e-2
-                        data = data.to(self.device)
-                        z, logdet_J = self.net(data)          # latent space variable
-                        if self.empirical_vars:
-                            # we only need to calculate the std
-                            sig = torch.stack([z[target==i].std(0, unbiased=False) for i in range(self.n_classes)])
-                            # negative log-likelihood for gaussian in latent space
-                            loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
-                        else:
-                            m = self.mu[target] 
-                            ls = self.log_sig[target]
+                if not self.unsupervised:
+                    if self.empirical_vars:
+                        # first check that std will be well defined
+                        if min([sum(target==i).item() for i in range(self.n_classes)]) < 2:
+                            # don't calculate loss and update weights -- it will give nan or error
+                            # go to next batch
+                            continue
+                    optimizer.zero_grad()
+                    data += torch.randn_like(data)*1e-2
+                    data = data.to(self.device)
+                    z, logdet_J = self.net(data)          # latent space variable
+                    if self.empirical_vars:
+                        # we only need to calculate the std
+                        sig = torch.stack([z[target==i].std(0, unbiased=False) for i in range(self.n_classes)])
+                        # negative log-likelihood for gaussian in latent space
+                        loss = 0.5 + sig[target].log().mean(1) + 0.5*np.log(2*np.pi)
+                    else:
+                        m = self.mu[target] 
+                        ls = self.log_sig[target]
+                        # negative log-likelihood for gaussian in latent space
+                        loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
+
+                elif self.unsupervised:
+                    optimizer.zero_grad()
+                    data += torch.randn_like(data)*1e-2
+                    data = data.to(self.device)
+                    z, logdet_J = self.net(data)          # latent space variable
+
+                    if self.init_method == "supervised_pretraining":
+                        # if True, do a pretraining for 5 epochs with supervision
+                        if epoch < 10 :
+                            m = self.mu_c[target] 
+                            ls = 0.5 * self.logvar_c[target]
                             # negative log-likelihood for gaussian in latent space
                             loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
-
-                    elif self.unsupervised:
-                        optimizer.zero_grad()
-                        data += torch.randn_like(data)*1e-2
-                        data = data.to(self.device)
-                        z, logdet_J = self.net(data)          # latent space variable
-
-                        if self.init_method == "supervised_pretraining":
-                            # if True, do a pretraining for 5 epochs with supervision
-                            if epoch < 10 :
-                                m = self.mu_c[target] 
-                                ls = 0.5 * self.logvar_c[target]
-                                # negative log-likelihood for gaussian in latent space
-                                loss = torch.mean(0.5*(z-m)**2 * torch.exp(-2*ls) + ls, 1) + 0.5*np.log(2*np.pi)
-                        # (1) implement p(z) as in i dont need u, as mixture model:
-                            else:
-                                loss = - self.log_likelihood_latent_space(z)
+                    # (1) implement p(z) as in i dont need u, as mixture model:
                         else:
                             loss = - self.log_likelihood_latent_space(z)
+                    else:
+                        loss = - self.log_likelihood_latent_space(z)
 
-                    loss -= logdet_J  / self.n_dims  # is zero in GIN 
-                    loss = loss.mean()
-                    self.print_loss(loss.item(), batch_idx, epoch, t0)
-                    losses.append(loss.item())
-                    loss.backward(retain_graph=True) # retain_graph=True
-                    optimizer.step()
+                loss -= logdet_J  / self.n_dims  # is zero in GIN 
+                loss = loss.mean()
+                self.print_loss(loss.item(), batch_idx, epoch, t0)
+                losses.append(loss.item())
+                loss.backward(retain_graph=True) # retain_graph=True
+                optimizer.step()
 
             if (self.init_method=="batch" or self.init_method=="supervised"):
                 if epoch in [0,1,4]:
@@ -244,7 +244,11 @@ class GIN(nn.Module):
             if (epoch+1)%self.save_frequency == 0:
                 self.save(os.path.join(self.save_dir, 'model_save', f'{epoch+1:03d}.pt'))
                 self.make_plots()
-    
+
+        if return_loss:
+            print(loss.cpu().detach().numpy())
+            return loss.cpu().detach().numpy()
+
 
     def log_likelihood_latent_space(self, z):
 
@@ -469,10 +473,12 @@ def construct_net_emnist(coupling_block):
 
 
 # function is here rather than in data.py to prevent circular import
-def generate_artificial_data_10d(n_clusters, n_data_points):
-
+def generate_artificial_data_10d_distribution(n_clusters):
     latent_means = torch.rand(n_clusters, 2)*10 - 5         # in range (-5, 5)
     latent_stds  = torch.rand(n_clusters, 2)*2.5 + 0.5      # in range (0.5, 3)
+    return latent_means, latent_stds
+
+def generate_artificial_data_10d(n_clusters, n_data_points, latent_means, latent_stds):
     
     labels = torch.randint(n_clusters, size=(n_data_points,))
     latent = latent_means[labels] + torch.randn(n_data_points, 2)*latent_stds[labels]

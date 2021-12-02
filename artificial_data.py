@@ -1,8 +1,13 @@
 import argparse
+from numpy import float32
 import torch
 import os
+import pandas as pd
 from collections import OrderedDict
-from model import GIN
+import seaborn as sns
+import matplotlib.pyplot as plt
+from model import GIN, generate_artificial_data_10d
+from data import make_dataloader
 from evaluate import cca_evaluation, evaluate_stability
 
 parser = argparse.ArgumentParser(description='Artificial data experiments (2d data embedded in 10d) with GIN.')
@@ -65,29 +70,95 @@ os.makedirs(trained_models_folder)
 init_model_path = os.path.join(model_origin.save_dir, 'model_save', 'init.pt')
 torch.save({'model': state_dict}, init_model_path )
 
-for i in range(2):
-        model = model_origin
-        data = torch.load(init_model_path)
-        model.load_state_dict(data['model'])
-        model.to(model.device)
-        model.n_classes = 5 
-        model.initialize()   # reinit to have different seeds
-        model.train_model()
-        trained_models_cluster_folder = os.path.join(trained_models_folder, f"{model.n_classes}_clusters")
-        try:
-                os.makedirs(trained_models_cluster_folder)
-        except Exception as e:
-                print(e)
-        trained_model_path = os.path.join(trained_models_cluster_folder, f'trained_model_{i}.pt')
-        state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
-        torch.save({'model': state_dict}, trained_model_path)
-        del model
-        
 
-if args.evaluate:
-        save_dir = trained_models_cluster_folder
-        # cca_evaluation(args, model_origin, save_dir)
-        evaluate_stability(args, model_origin, save_dir, cross_validation=True)
+many_data = False # True
+
+if many_data:
+        n_data_points = [1000, 5000, 10000, 15000, 20000, 25000, 30000 ]
+else:
+        n_data_points = [args.n_data_points]
+
+dict = {'n_data_points':[],
+'loss':[]
+}
+
+dl = pd.DataFrame(dict)
+
+for n_data in n_data_points:
+        for i in range(2):
+                model = model_origin
+                data = torch.load(init_model_path)
+                model.load_state_dict(data['model'])
+                model.to(model.device)
+                model.n_classes = 5 
+                model.initialize()   # reinit to have different seeds
+                if i == 0:    # always compare models which where trained on same data  
+                        model.latent, model.data, model.target = generate_artificial_data_10d( model.n_classes , n_data, model.latent_means_true, model.latent_stds_true)
+                        model.train_loader = make_dataloader(model.data, model.target, model.batch_size)
+                        print("The first 5 targets:", model.target[:5])
+                        print("The size of train_loder :" , model.target.size)
+
+                loss = model.train_model( return_loss=True)
+                dl.loc[len(dl.index)] = [f'{int(n_data/1000)} k', float32(loss)] 
+                trained_models_cluster_folder = os.path.join(trained_models_folder, f"{model.n_classes}_clusters_n_data_{n_data}")
+                try:
+                        os.makedirs(trained_models_cluster_folder)
+                except Exception as e:
+                        print("The Folder already exists")
+                trained_model_path = os.path.join(trained_models_cluster_folder, f'trained_model_{i}.pt')
+                state_dict = OrderedDict((k,v) for k,v in model.state_dict().items() if not k.startswith('net.tmp_var'))
+                torch.save({'model': state_dict}, trained_model_path)
+                del model
+                
+        if args.evaluate:
+                save_dir = trained_models_cluster_folder
+                evaluate_stability(args, model_origin, save_dir, cross_validation=True)
+
+#         if args.evaluate:
+#                 save_dir = trained_models_cluster_folder
+#                 print("The number of data: ", n_data)
+#                 # evaluate_stability(args, model_origin, save_dir, cross_validation=True)
+#                 # cca_evaluation(args, model_origin, save_dir)
+#                 if n_data == n_data_points[0]:
+#                         df = cca_evaluation(args, model_origin, save_dir, n_data_points=n_data)
+#                 else:
+#                         df2 = cca_evaluation(args, model_origin, save_dir, n_data_points=n_data)
+#                         df = df.append(df2, ignore_index=True)
+
+#                 print(df)
+#                 print(df[df['data']=='test'])
+        
+# save_pandas_df = os.path.join(trained_models_folder, 'all_data_file.csv')
+# df.to_csv(save_pandas_df)
+
+# g = sns.catplot(x="n_data_points", y="mcc_value",
+#         hue="method", col="dimension",
+#         data=df[df['data']=='test'], kind="box",
+#         height=4, aspect=.7, dodge=False)
+# 
+# g.fig.subplots_adjust(top=0.9) # adjust the Figure in rp
+# g.fig.suptitle('MCC value for different sizes of trainings data with different methods. \
+#                 Create new data for each datasize. \
+#                         The number of classes in latent space is 5. \n')
+
+# .set(title=f'MCC value for different sizes of trainings data with different methods. \
+#                 Create new data for each datasize. \
+#                         The number of classes in latent space is 5. \n')
+
+# # g_fig = g.get_figure()
+# plt.savefig( os.path.join(trained_models_folder, 'all_data_plot.pdf') )
+
+# plt.clf()
+
+# save_pandas_dl = os.path.join(trained_models_folder, 'all_losses_file.csv')
+# dl.to_csv(save_pandas_dl)
+# print(dl)
+# l = sns.boxplot(x="n_data_points", y="loss", data=dl, palette="Set3", dodge=False).set(
+#         title=f'Losses after {args.n_epochs} for different sizes of train data.') #, dodge =False
+# # l_fig = l.get_figure()
+
+# plt.savefig( os.path.join(trained_models_folder, 'all_losses_plot.pdf') )
+
 
 # for i in range(3):
 #         model = model_origin
