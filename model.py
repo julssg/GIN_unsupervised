@@ -34,14 +34,17 @@ class GIN(nn.Module):
         self.timestamp = str(int(time()))
         
         if self.dataset == '10d':
+            self.n_data_points = n_data_points
             self.net = construct_net_10d(coupling_block='gin' if self.incompressible_flow else 'glow', init_identity=init_identity)
             assert type(n_classes) is int
             self.n_classes = n_classes
             self.n_dims = 10 
             self.save_dir = os.path.join('./artificial_data_save/', self.timestamp)
-            self.latent_means_true, self.latent_stds_true = generate_artificial_data_10d_distribution(self.n_classes)
-            self.latent, self.data, self.target = generate_artificial_data_10d( self.n_classes, n_data_points, self.latent_means_true, self.latent_stds_true)
+            self.latent_means_true, self.latent_stds_true, self.random_transf = generate_artificial_data_10d_distribution(self.n_classes)
+            self.latent, self.data, self.target = generate_artificial_data_10d( self.n_classes, self.n_data_points, self.latent_means_true, self.latent_stds_true, self.random_transf)
             self.train_loader = make_dataloader(self.data, self.target, self.batch_size)
+            self.latent_test, self.data_test, self.target_test = generate_artificial_data_10d( self.n_classes,  1000 , self.latent_means_true, self.latent_stds_true, self.random_transf)
+            self.test_loader = make_dataloader(self.data_test, self.target_test, 50)
         elif self.dataset == 'EMNIST':
             if not init_identity:
                 raise RuntimeError('init_identity=False not implemented for EMNIST experiments')
@@ -231,10 +234,10 @@ class GIN(nn.Module):
                 loss.backward(retain_graph=True) # retain_graph=True
                 optimizer.step()
 
-            if (self.init_method=="batch" or self.init_method=="supervised"):
-                if epoch in [0,1,4]:
-                    self.set_mu_sig(init=True)  
-                    print(f"Re-init Parameters with {self.init_method}.")
+            # if (self.init_method=="batch" or self.init_method=="supervised"):
+            #     if epoch in [0,1,4]:
+            #         self.set_mu_sig(init=True)  
+            #         print(f"Re-init Parameters with {self.init_method}.")
 
             if (epoch+1)%self.epochs_per_line == 0:
                 avg_loss = np.mean(losses)
@@ -353,7 +356,8 @@ class GIN(nn.Module):
                     batch_len = round(len(latent)/self.n_classes)-1
                     self.mu_c.data = torch.stack([latent[i*batch_len:(i+1)*batch_len].mean(0) for i in range(self.n_classes)]).to(self.device)
                     self.logvar_c.data = torch.stack([torch.log(latent[i*batch_len:(i+1)*batch_len].std(0)**2) for i in range(self.n_classes)]).to(self.device)
-
+                    print(f"Batch init is working, test data to init each batche: {batch_len} \n \
+                        gives means: {self.mu_c}.")
             else:
                 self.mu = self.mu_c.detach()
                 self.sig = torch.exp(0.5 * self.logvar_c).detach()
@@ -476,15 +480,15 @@ def construct_net_emnist(coupling_block):
 def generate_artificial_data_10d_distribution(n_clusters):
     latent_means = torch.rand(n_clusters, 2)*10 - 5         # in range (-5, 5)
     latent_stds  = torch.rand(n_clusters, 2)*2.5 + 0.5      # in range (0.5, 3)
-    return latent_means, latent_stds
+    random_transf = construct_net_10d('glow', init_identity=False)
 
-def generate_artificial_data_10d(n_clusters, n_data_points, latent_means, latent_stds):
-    
+    return latent_means, latent_stds, random_transf
+
+def generate_artificial_data_10d(n_clusters, n_data_points, latent_means, latent_stds, random_transf ):
     labels = torch.randint(n_clusters, size=(n_data_points,))
     latent = latent_means[labels] + torch.randn(n_data_points, 2)*latent_stds[labels]
     latent = torch.cat([latent, torch.randn(n_data_points, 8)*1e-2], 1)
-    
-    random_transf = construct_net_10d('glow', init_identity=False)
+    random_transf.to('cpu')
     data = random_transf(latent)[0].detach()
     
     return latent, data, labels
