@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from model import GIN, generate_artificial_data_10d
 from data import make_dataloader
 from evaluate_old import cca_evaluation, evaluate_stability
-from evaluate import mcc_evaluation
+from evaluate import mcc_evaluation, plot_loss, plot_mcc
 
 def load(base_model, model_path, device):
     model = base_model.to(device)
@@ -83,30 +83,27 @@ os.makedirs(trained_models_folder)
 init_model_path = os.path.join(model_origin.save_dir, 'model_save', 'init.pt')
 torch.save({'model': state_dict}, init_model_path )
 
+if args.evaluate:
+        assert args.n_data_points > 1200, "Please use at least 1200 data points which will be utilized as test data."
+        test_data = model_origin.data[:1200]
 
 many_data = True # False 
 
 if many_data:
         n_data_points = np.arange(100, 35000 , 3000) # [1000, 5000, 10000, 15000, 20000, 25000, 30000 ]
-        ndata_points = np.arange(100, 200, 100)
+        # n_data_points = np.arange(100, 200 , 100)
 else:
         n_data_points = [args.n_data_points]
 
-dict = {'n_data_points':[],
+dict = {'n_training_points':[],
 'loss':[]
 }
 
 dl = pd.DataFrame(dict)
 
 for n_data in n_data_points:
-        for i in range(3):
+        for i in range(4):
                 model = load(model_origin, init_model_path, model_origin.device)
-                # model = model_origin
-                print(f"The initial number of data in original model is: {model_origin.data.shape[0]}")
-                # data = torch.load(init_model_path)
-                # model.load_state_dict(data['model'])
-                print(f"The initial number of data is: {model.data.shape[0]}")
-                # model.to(model.device)
                 model.n_classes = 5 
                 if i == 0:    # always compare models which where trained on same data  
                         model.latent, model.data, model.target = generate_artificial_data_10d( model.n_classes , n_data, model.latent_means_true, model.latent_stds_true , model.random_transf)
@@ -114,7 +111,7 @@ for n_data in n_data_points:
                         model.latent_test, model.data_test, model.target_test = generate_artificial_data_10d(model.n_classes, 1000 ,model.latent_means_true, model.latent_stds_true, model.random_transf)
                         model.test_loader = make_dataloader(model.data_test, model.target_test, 50 )
                         print("The first 5 targets:", model.target[:5])
-                        print("The size of train_loder :" , model.target.size)
+                        print("The size of train_loder :" , model.target.shape)
                 model.initialize()    # reinit to have different seeds
                 loss = model.train_model( return_loss=True)
                 dl.loc[len(dl.index)] = [f'{int(n_data/1000)} k', float32(loss)] 
@@ -138,46 +135,17 @@ for n_data in n_data_points:
                 # evaluate_stability(args, model_origin, save_dir, cross_validation=True)
                 # cca_evaluation(args, model_origin, save_dir)
                 if n_data == n_data_points[0]:
-                        print(f"The initial number of data in original model is: {model_origin.data.shape[0]}")
+                        print(f"The shape of test data is: {test_data.shape}")
+                        print(f"The shape of train data is: {model_origin.data.shape}")
                         # df = cca_evaluation(args, model_origin, save_dir, n_data_points=n_data)
-                        df = mcc_evaluation(model_origin, args, save_dir, cross_validation=False)
+                        df = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=True)
                 else:
                         # df2 = cca_evaluation(args, model_origin, save_dir, n_data_points=n_data)
-                        df2 = mcc_evaluation(model_origin, args, save_dir, cross_validation=False)
+                        df2 = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=True)
                         df = df.append(df2, ignore_index=True)
-
-                print(df)
-                print(df[df['data']=='test'])
         
-save_pandas_df = os.path.join(trained_models_folder, 'all_data_file.csv')
-df.to_csv(save_pandas_df)
-
-g = sns.catplot(x="n_data_points", y="mcc_value",
-        hue="method", col="dimension",
-        data=df[df['data']=='test'], kind="box",
-        height=8, aspect=.7, dodge=False)
-
-g.fig.subplots_adjust(top=0.9) # adjust the Figure in rp
-g.fig.suptitle('MCC value for different sizes of trainings data with different methods. Create new data for each datasize.\n\
-                                        The number of classes in latent space is 5. \n')
-
-# .set(title=f'MCC value for different sizes of trainings data with different methods. \
-#                 Create new data for each datasize. \
-#                         The number of classes in latent space is 5. \n')
-
-# g_fig = g.get_figure()
-plt.savefig( os.path.join(trained_models_folder, 'all_data_plot.pdf') )
-
-plt.clf()
-
-save_pandas_dl = os.path.join(trained_models_folder, 'all_losses_file.csv')
-dl.to_csv(save_pandas_dl)
-print(dl)
-l = sns.boxplot(x="n_data_points", y="loss", data=dl, palette="Set3").set(
-        title=f'Losses after {args.n_epochs} epochs for different sizes of train data.') #, dodge =False
-# l_fig = l.get_figure()
-
-plt.savefig( os.path.join(trained_models_folder, 'all_losses_plot.pdf') )
+plot_mcc(df, trained_models_folder)
+plot_loss(dl, trained_models_folder, args.n_epochs)
 
 
 # for i in range(3):

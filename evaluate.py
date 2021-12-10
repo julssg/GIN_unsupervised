@@ -1,5 +1,8 @@
+import os
 from os import listdir
 from os.path import isfile, join
+import seaborn as sns
+import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import pandas as pd
@@ -14,6 +17,7 @@ def mcc_evaluation(
     base_model, 
     args, 
     save_dir,
+    test_data=None,
     cross_validation=False, 
     plot=False
     ):
@@ -49,7 +53,7 @@ def mcc_evaluation(
     elif base_model.dataset == '10d':
         n_train_data = (load(base_model, saved_models[0], device)).data.to(device).shape[0]
         print(n_train_data)
-        batch_size = 100
+        batch_size = 300
         val_batches = 3
         num_batches = 4
         dims = [5, 10] # np.arange(1 , GIN.n_dims+1 , 1)
@@ -57,7 +61,7 @@ def mcc_evaluation(
     else:
         print(f"ERROR: {base_model.dataset} as dataset is not defined.")
 
-    print(f"##############  Starting Identifiability Evaluation ################")
+    print(f"##############  Starting Identifiability Evaluation ################ \n")
 
     dict = {'dimension':[],
         'mcc_value':[],
@@ -69,6 +73,7 @@ def mcc_evaluation(
 
     for method in methods:
         print(f"##############  Using method: {method} ################")
+        print(f"##############  Using cross validation: {cross_validation} ################")
         for dim in dims:
             mcc_val_cross_models = []
             mcc_test_cross_models = []
@@ -77,20 +82,12 @@ def mcc_evaluation(
                     if (j == i) or (j<i):
                         continue
 
-                    if cross_validation:
-                        z_ref_set = get_latent_space_samples(base_model, args, device, \
-                            saved_models[i], for_cross_validation=True, batch_size=batch_size, \
-                            num_batches=num_batches, val_batches=val_batches)
-                        z_comp_set = get_latent_space_samples(base_model, args, device, \
-                            saved_models[j], for_cross_validation=True, batch_size=batch_size, \
-                            num_batches=num_batches, val_batches=val_batches)
-                    else:
-                        z_ref_set = get_latent_space_samples(base_model, args, device, \
-                            saved_models[i], for_cross_validation=False, batch_size=batch_size, \
-                            num_batches=num_batches, val_batches=val_batches)
-                        z_comp_set  =get_latent_space_samples(base_model, args, device, \
-                            saved_models[j], for_cross_validation=True, batch_size=batch_size, \
-                            num_batches=num_batches, val_batches=val_batches)
+                    z_ref_set = get_latent_space_samples(base_model, args, device, \
+                        saved_models[i], test_data, for_cross_validation=cross_validation, batch_size=batch_size, \
+                        num_batches=num_batches, val_batches=val_batches)
+                    z_comp_set = get_latent_space_samples(base_model, args, device, \
+                        saved_models[j], test_data, for_cross_validation=cross_validation, batch_size=batch_size, \
+                        num_batches=num_batches, val_batches=val_batches)
 
                     mcc_val_cross_validation = []
                     mcc_test_cross_validation = []
@@ -105,17 +102,21 @@ def mcc_evaluation(
                         z_comp_test = z_comp_set[k]
                         z_ref_val = np.concatenate([z_ref_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
                         z_comp_val = np.concatenate([z_comp_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
+                        # print(f"The shape of latent space is: \n validation: {z_ref_val.shape}, \n test {z_ref_test.shape}.")
 
                         x_val, y_val, x_test, y_test = apply_method(method, z_ref_test, z_comp_test, \
-                            z_ref_val, z_comp_val, args.n_classes)
+                            z_ref_val, z_comp_val, args.n_clusters)
 
                         mcc_val_cross_validation.append(compute_mcc(x_val, y_val))
                         mcc_test_cross_validation.append(compute_mcc(x_test, y_test))
 
+                    # print(np.array(mcc_val_cross_validation))
                     mcc_val = np.mean(np.array(mcc_val_cross_validation))
                     mcc_test = np.mean(np.array(mcc_test_cross_validation))
+
                     mcc_val_cross_models.append(mcc_val)
                     mcc_test_cross_models.append(mcc_test)
+
                     if base_model.dataset == 'EMNIST':
                         df.loc[len(df.index)] = [f'{dim}', mcc_val, 'val', f'{n_train_data}', method] 
                         df.loc[len(df.index)] = [f'{dim}', mcc_test, 'test',  f'{n_train_data}', method]
@@ -123,12 +124,10 @@ def mcc_evaluation(
                         df.loc[len(df.index)] = [f'{dim}', mcc_val, 'val', f'{(n_train_data/1000):.1f} k', method] 
                         df.loc[len(df.index)] = [f'{dim}', mcc_test, 'test',  f'{(n_train_data/1000):.1f} k', method]
 
-            print(f"The mean correlation coefficient over serveral models\
-                using {dim} components an method {method} on validation data is: \n \
-                {np.mean(np.array(mcc_val_cross_models))} +- {np.std(np.array(mcc_val_cross_models))}.")
-            print(f"The mean correlation coefficient over serveral models\
-                using {dim} components an method {method}  on test data is: \n \
-                {np.mean(np.array(mcc_test_cross_models))} +- {np.std(np.array(mcc_test_cross_models))}.")
+            print(f"The mean correlation coefficient over serveral models using {dim} components, \n\
+                {n_train_data} data points during training and method {method} \n\
+                on validation data is: {np.mean(np.array(mcc_val_cross_models))} +- {np.std(np.array(mcc_val_cross_models))} \n\
+                on test data is: {np.mean(np.array(mcc_test_cross_models))} +- {np.std(np.array(mcc_test_cross_models))}.")
 
     return df
 
@@ -145,7 +144,7 @@ def apply_method(method, z_ref_test, z_comp_test, z_ref_val, z_comp_val, n_class
     '''
     try:
         if "PCA" in method:
-            print("############## Apply PCA ################")
+            # print("############## Apply PCA ################")
             if z_ref_test.shape[1] == 784:
                 pca_dim = 450
             elif z_ref_test.shape[1] == 10:
@@ -165,10 +164,10 @@ def apply_method(method, z_ref_test, z_comp_test, z_ref_val, z_comp_val, n_class
             z_comp_test = pca.transform(z_comp_test)
 
         if "PLSCan" in method:
-            print("############## Apply PLSCanonical ################")
+            # print("############## Apply PLSCanonical ################")
             plsca = PLSCanonical(n_components=n_classes, max_iter=2500)
         elif "CCA" in method:
-            print("############## Apply CCA ################")
+            # print("############## Apply CCA ################")
             plsca = CCA(n_components=n_classes, max_iter=2500)
         else:
             print("ERROR: please provide a feature reduction method.")
@@ -193,18 +192,48 @@ def compute_mcc(x, y):
     x.shape = y.shape = [n_samples, n_features]
     No dimensionality reduction happens in this function.
     '''
-    if not x:
+    if None in x:
         return
     else:
         mean_cc = np.sum([ np.corrcoef(x[:, k], y[:, k])[0, 1] for k in range(x.shape[1])] ) / x.shape[1]
         return mean_cc
 
 
+def plot_loss(loss: dict, trained_models_folder:str, n_epochs:int ):
+    ''' take dictonary with losses and plot as boxplot + save as csv file.'''
+    save_pandas_dl = join(trained_models_folder, 'all_losses_file.csv')
+    loss.to_csv(save_pandas_dl)
+    print(loss)
+    l = sns.boxplot(x="n_training_points", y="loss", data=loss, palette="Set3").set(
+            title=f'Losses after {n_epochs} epochs for different sizes of traininings data.')
+    plt.show()
+    plt.savefig( os.path.join(trained_models_folder, 'all_losses_plot.pdf'))
+    plt.close()
+
+
+def plot_mcc(mcc:dict, trained_models_folder:str ):
+    ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
+    save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
+    mcc.to_csv(save_pandas_df)
+
+    g = sns.catplot(x="n_training_points", y="mcc_value",
+            hue="method", col="dimension",
+            data=mcc[mcc['data']=='test'], kind="box",
+            height=8, aspect=.7, dodge=False)
+
+    g.fig.subplots_adjust(top=0.9) # adjust the Figure in rp
+    g.fig.suptitle('MCC value for different sizes of trainings data with different methods. Create new data for each datasize.\n\
+                        Keep set for validation/testing constant. The number of classes in latent space is 5. \n')
+    plt.show()
+    plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
+    plt.close()
+
 def get_latent_space_samples(
     base_model, 
     args, 
     device, 
-    model_path, 
+    model_path,
+    test_data=None,
     for_cross_validation=False, 
     batch_size=5000, 
     num_batches=6, 
@@ -247,16 +276,17 @@ def get_latent_space_samples(
 
     elif base_model.dataset == '10d':
         # Use the data from the base model, which were not used for training for validation
-        data_val = base_model.data.to(device)
+        if test_data == None:
+            test_data = model.data[:400]
 
-        if batch_size*num_batches > data_val.shape[0]:
+        if batch_size*num_batches > test_data.shape[0]:
             print(f"ERROR: The batch size times number of batches (= {batch_size*num_batches}) \
-                exceeds total number of datapoints (= {data_val.shape[0]}).\n \
+                exceeds total number of datapoints (= {test_data.shape[0]}).\n \
                     Abort further execution. ")
             exit(1)
         z_set = []
         for i in range(num_batches):
-            data = data_val[i*batch_size: (i+1)*batch_size ]
+            data = test_data[i*batch_size: (i+1)*batch_size ]
             z_batch = model(data.to(device))[0].cpu().detach() 
             z_set.append(z_batch)
         del model
@@ -264,6 +294,7 @@ def get_latent_space_samples(
         if not for_cross_validation:
             z_val = np.concatenate(z_set[:(val_batches-1)], axis=0)
             z_test = np.concatenate(z_set[(val_batches-1):], axis=0)
+            print(f"The shape of the latent spaces: \n {z_val.shape}, \n {z_test.shape}.")
             return [z_val, z_test]
         else:
             return z_set
