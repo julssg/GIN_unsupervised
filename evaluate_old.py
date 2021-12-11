@@ -45,6 +45,7 @@ def cca_evaluation(args, GIN, save_dir, n_data_points=None ):
         num_batches = 3
         batch_size = int(n/num_batches)
         data_val = GIN.data.to(device)
+        n = data_val.shape[0]
         test_loader = None 
         # dims = [10]
         dims = [5, 10] # np.arange(1 , GIN.n_dims+1 , 1)

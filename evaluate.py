@@ -47,8 +47,8 @@ def mcc_evaluation(
     if base_model.dataset == 'EMNIST':
         n_train_data = "default"
         batch_size = 5000
-        num_batches = 6
-        val_batches = 5
+        num_batches = 4
+        val_batches = 3
         dims = np.arange(15, 35, 2)
     elif base_model.dataset == '10d':
         n_train_data = (load(base_model, saved_models[0], device)).data.to(device).shape[0]
@@ -75,20 +75,21 @@ def mcc_evaluation(
         print(f"##############  Using method: {method} ################")
         print(f"##############  Using cross validation: {cross_validation} ################")
         for dim in dims:
+            print(f"##############  Using dimension: {dim} ################")
             mcc_val_cross_models = []
             mcc_test_cross_models = []
             for i in range(num_models):
                 for j in range(num_models):
                     if (j == i) or (j<i):
                         continue
-
+                    print("checkpoint 1")
                     z_ref_set = get_latent_space_samples(base_model, args, device, \
                         saved_models[i], test_data, for_cross_validation=cross_validation, batch_size=batch_size, \
                         num_batches=num_batches, val_batches=val_batches)
                     z_comp_set = get_latent_space_samples(base_model, args, device, \
                         saved_models[j], test_data, for_cross_validation=cross_validation, batch_size=batch_size, \
                         num_batches=num_batches, val_batches=val_batches)
-
+                    print("checkpoint 2")
                     mcc_val_cross_validation = []
                     mcc_test_cross_validation = []
                     for k in range(len(z_ref_set)):
@@ -98,15 +99,16 @@ def mcc_evaluation(
                         # if cross_validation==true: len(z_ref_set)-1 iteration with test_data in [set[1:len(z_ref_set)] 
                         if k == 0:
                             continue
+                        print("checkpoint 3")
                         z_ref_test = z_ref_set[k]
                         z_comp_test = z_comp_set[k]
                         z_ref_val = np.concatenate([z_ref_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
                         z_comp_val = np.concatenate([z_comp_set[m] for m in range(len(z_ref_set)) if m != k], axis=0)
                         # print(f"The shape of latent space is: \n validation: {z_ref_val.shape}, \n test {z_ref_test.shape}.")
-
+                        print("checkpoint 4")
                         x_val, y_val, x_test, y_test = apply_method(method, z_ref_test, z_comp_test, \
-                            z_ref_val, z_comp_val, args.n_clusters)
-
+                            z_ref_val, z_comp_val, dim)
+                        print("checkpoint 5")
                         mcc_val_cross_validation.append(compute_mcc(x_val, y_val))
                         mcc_test_cross_validation.append(compute_mcc(x_test, y_test))
 
@@ -172,7 +174,10 @@ def apply_method(method, z_ref_test, z_comp_test, z_ref_val, z_comp_val, n_class
         else:
             print("ERROR: please provide a feature reduction method.")
             exit(1)
-
+        print(f"checkpoint 4.1: now fit method to {n_classes}.")
+        print(f"The latent space has shape: \n \
+            val: {z_ref_val.shape} \n\
+            test: {z_ref_test.shape}" )
         #### transform latent spaces:
         plsca.fit(z_ref_val, z_comp_val)
         x_val, y_val = plsca.transform(z_ref_val, z_comp_val)
@@ -211,7 +216,7 @@ def plot_loss(loss: dict, trained_models_folder:str, n_epochs:int ):
     plt.close()
 
 
-def plot_mcc(mcc:dict, trained_models_folder:str ):
+def plot_mcc_artifical_data(mcc:dict, trained_models_folder:str ):
     ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
     save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
     mcc.to_csv(save_pandas_df)
@@ -222,11 +227,31 @@ def plot_mcc(mcc:dict, trained_models_folder:str ):
             height=8, aspect=.7, dodge=False)
 
     g.fig.subplots_adjust(top=0.9) # adjust the Figure in rp
-    g.fig.suptitle('MCC value for different sizes of trainings data with different methods. Create new data for each datasize.\n\
+    g.fig.suptitle('MCC value for different sizes of trainings artifical data with different methods. Create new data for each datasize.\n\
                         Keep set for validation/testing constant. The number of classes in latent space is 5. \n')
     plt.show()
     plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
     plt.close()
+
+
+
+def plot_mcc_emnist(mcc:dict, trained_models_folder:str ):
+    ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
+    save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
+    mcc.to_csv(save_pandas_df)
+    
+    plt.figure(figsize=(10,6))
+    g = sns.boxplot(x="dimension", y="mcc_value", hue="method",
+            data=mcc[mcc['data']=='test'], dodge=False, palette="Set3")
+    plt.xlabel("final dimension", size=8)
+    plt.ylabel("MCC", size=8)
+    plt.title(f'MCC value for different final dimensions, training GLOW, using emnist data\n\
+                    with different methods to calculate MCC. \n\
+                    The number of clusters trained with in latent space is 40.', size=12)
+    plt.show()
+    plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
+    plt.close()
+
 
 def get_latent_space_samples(
     base_model, 

@@ -5,12 +5,9 @@ import torch
 import os
 import pandas as pd
 from collections import OrderedDict
-import seaborn as sns
-import matplotlib.pyplot as plt
 from model import GIN, generate_artificial_data_10d
 from data import make_dataloader
-from evaluate_old import cca_evaluation, evaluate_stability
-from evaluate import mcc_evaluation, plot_loss, plot_mcc
+from evaluate import mcc_evaluation, plot_loss, plot_mcc_artifical_data
 
 def load(base_model, model_path, device):
     model = base_model.to(device)
@@ -144,7 +141,7 @@ for n_data in n_data_points:
                         df2 = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=True)
                         df = df.append(df2, ignore_index=True)
         
-plot_mcc(df, trained_models_folder)
+plot_mcc_artifical_data(df, trained_models_folder)
 plot_loss(dl, trained_models_folder, args.n_epochs)
 
 
