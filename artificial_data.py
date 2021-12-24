@@ -7,7 +7,8 @@ import pandas as pd
 from collections import OrderedDict
 from model import GIN, generate_artificial_data_10d
 from data import make_dataloader
-from evaluate import mcc_evaluation, plot_loss, plot_mcc_artifical_data
+from evaluate import mcc_evaluation
+from plot import plot_loss, plot_mcc_artifical_data
 
 def load(base_model, model_path, device):
     model = base_model.to(device)
@@ -87,7 +88,7 @@ if args.evaluate:
 many_data = True # False 
 
 if many_data:
-        n_data_points = np.arange(100, 35000 , 3000) # [1000, 5000, 10000, 15000, 20000, 25000, 30000 ]
+        n_data_points = np.arange(100, 3500 , 3000) # [1000, 5000, 10000, 15000, 20000, 25000, 30000 ]
         # n_data_points = np.arange(100, 200 , 100)
 else:
         n_data_points = [args.n_data_points]
@@ -135,10 +136,10 @@ for n_data in n_data_points:
                         print(f"The shape of test data is: {test_data.shape}")
                         print(f"The shape of train data is: {model_origin.data.shape}")
                         # df = cca_evaluation(args, model_origin, save_dir, n_data_points=n_data)
-                        df = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=True)
+                        df = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=False)
                 else:
                         # df2 = cca_evaluation(args, model_origin, save_dir, n_data_points=n_data)
-                        df2 = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=True)
+                        df2 = mcc_evaluation(model_origin, args, save_dir, test_data, cross_validation=False)
                         df = df.append(df2, ignore_index=True)
         
 plot_mcc_artifical_data(df, trained_models_folder)

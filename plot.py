@@ -5,6 +5,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 from time import time
 import os
+from os.path import isfile, join
+import seaborn as sns
 
 matplotlib.use("Agg")
 
@@ -167,7 +169,51 @@ def emnist_plot_spectrum(model, sig_rms):
     plt.title('Spectrum on EMNIST')
     plt.savefig(os.path.join(model.save_dir, 'figures', f'epoch_{model.epoch+1:03d}', 'spectrum.png'))
     plt.close()
+
+
+def plot_loss(loss: dict, trained_models_folder:str, n_epochs:int ):
+    ''' take dictonary with losses and plot as boxplot + save as csv file.'''
+    save_pandas_dl = join(trained_models_folder, 'all_losses_file.csv')
+    loss.to_csv(save_pandas_dl)
+    print(loss)
+    l = sns.boxplot(x="n_training_points", y="loss", data=loss, palette="Set3").set(
+            title=f'Losses after {n_epochs} epochs for different sizes of traininings data.')
+    plt.show()
+    plt.savefig( os.path.join(trained_models_folder, 'all_losses_plot.pdf'))
+    plt.close()
+
+
+def plot_mcc_artifical_data(mcc:dict, trained_models_folder:str ):
+    ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
+    save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
+    mcc.to_csv(save_pandas_df)
+
+    g = sns.catplot(x="n_training_points", y="mcc_value",
+            hue="method", col="dimension",
+            data=mcc[mcc['data']=='test'], kind="box",
+            height=8, aspect=.7, dodge=False)
+
+    g.fig.subplots_adjust(top=0.9) # adjust the Figure in rp
+    g.fig.suptitle('MCC value for different sizes of trainings artifical data with different methods. Create new data for each datasize.\n\
+                        Keep set for validation/testing constant. The number of classes in latent space is 5. \n')
+    plt.show()
+    plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
+    plt.close()
+
+
+def plot_mcc_emnist(mcc:dict, trained_models_folder:str ):
+    ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
+    save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
+    mcc.to_csv(save_pandas_df)
     
-
-
-
+    plt.figure(figsize=(10,6))
+    g = sns.boxplot(x="dimension", y="mcc_value", hue="method",
+            data=mcc[mcc['data']=='test'], dodge=False, palette="Set3")
+    plt.xlabel("final dimension", size=8)
+    plt.ylabel("MCC", size=8)
+    plt.title(f'MCC value for different final dimensions, training GLOW, using emnist data\n\
+                    with different methods to calculate MCC. \n\
+                    The number of clusters trained with in latent space is 40.', size=12)
+    plt.show()
+    plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
+    plt.close()

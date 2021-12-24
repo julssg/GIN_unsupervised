@@ -1,8 +1,6 @@
 import os
 from os import listdir
 from os.path import isfile, join
-import seaborn as sns
-import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import pandas as pd
@@ -65,6 +63,7 @@ def mcc_evaluation(
 
     dict = {'dimension':[],
         'mcc_value':[],
+        'mcc_baseline':[],
         'data':[],
         'n_training_points':[],
         'method':[]
@@ -119,12 +118,17 @@ def mcc_evaluation(
                     mcc_val_cross_models.append(mcc_val)
                     mcc_test_cross_models.append(mcc_test)
 
+                    if i == 0 and j == 1:
+                        # only compute baseline for one model
+                        mcc_baseline_val, mcc_baseline_test = get_baseline(method, z_ref_test, z_comp_test, z_ref_val, \
+                            z_comp_val, dim, n_permutations=50)
+
                     if base_model.dataset == 'EMNIST':
-                        df.loc[len(df.index)] = [f'{dim}', mcc_val, 'val', f'{n_train_data}', method] 
-                        df.loc[len(df.index)] = [f'{dim}', mcc_test, 'test',  f'{n_train_data}', method]
+                        df.loc[len(df.index)] = [f'{dim}', mcc_val, mcc_baseline_val, 'val', f'{n_train_data}', method] 
+                        df.loc[len(df.index)] = [f'{dim}', mcc_test, mcc_baseline_test, 'test',  f'{n_train_data}', method]
                     elif base_model.dataset == '10d':
-                        df.loc[len(df.index)] = [f'{dim}', mcc_val, 'val', f'{(n_train_data/1000):.1f} k', method] 
-                        df.loc[len(df.index)] = [f'{dim}', mcc_test, 'test',  f'{(n_train_data/1000):.1f} k', method]
+                        df.loc[len(df.index)] = [f'{dim}', mcc_val, mcc_baseline_val, 'val', f'{(n_train_data/1000):.1f} k', method] 
+                        df.loc[len(df.index)] = [f'{dim}', mcc_test, mcc_baseline_test, 'test',  f'{(n_train_data/1000):.1f} k', method]
 
             print(f"The mean correlation coefficient over serveral models using {dim} components, \n\
                 {n_train_data} data points during training and method {method} \n\
@@ -174,10 +178,10 @@ def apply_method(method, z_ref_test, z_comp_test, z_ref_val, z_comp_val, n_class
         else:
             print("ERROR: please provide a feature reduction method.")
             exit(1)
-        print(f"checkpoint 4.1: now fit method to {n_classes}.")
-        print(f"The latent space has shape: \n \
-            val: {z_ref_val.shape} \n\
-            test: {z_ref_test.shape}" )
+        # print(f"checkpoint 4.1: now fit method to {n_classes}.")
+        # print(f"The latent space has shape: \n \
+        #     val: {z_ref_val.shape} \n\
+        #     test: {z_ref_test.shape}" )
         #### transform latent spaces:
         plsca.fit(z_ref_val, z_comp_val)
         x_val, y_val = plsca.transform(z_ref_val, z_comp_val)
@@ -204,53 +208,38 @@ def compute_mcc(x, y):
         return mean_cc
 
 
-def plot_loss(loss: dict, trained_models_folder:str, n_epochs:int ):
-    ''' take dictonary with losses and plot as boxplot + save as csv file.'''
-    save_pandas_dl = join(trained_models_folder, 'all_losses_file.csv')
-    loss.to_csv(save_pandas_dl)
-    print(loss)
-    l = sns.boxplot(x="n_training_points", y="loss", data=loss, palette="Set3").set(
-            title=f'Losses after {n_epochs} epochs for different sizes of traininings data.')
-    plt.show()
-    plt.savefig( os.path.join(trained_models_folder, 'all_losses_plot.pdf'))
-    plt.close()
+def get_baseline(method, z_ref_test, z_comp_test, z_ref_val, z_comp_val, dim, n_permutations=10):
+    '''Use Permutation test to compute a baseline which can be substracted from
+    the current MCC. '''
+    # permutate comp space samples iterativly and compute baseline
+    mcc_baseline_val = []
+    mcc_baseline_test = []
+    for j in range(n_permutations):
+        if j > 0:
+            # print(f"Working on permutation {j}/{n_permutations}.")
+            z_comp_test = np.array([z_comp_test[i - j] for i in range(z_comp_test.shape[0])])
+            z_comp_val = np.array([z_comp_val[i - j] for i in range(z_comp_val.shape[0])])
 
+            x_val, y_val, x_test, y_test = apply_method(method, z_ref_test, z_comp_test, \
+            z_ref_val, z_comp_val, dim)
+            mcc_baseline_val.append(compute_mcc(x_val, y_val))
+            mcc_baseline_test.append(compute_mcc(x_test, y_test))
 
-def plot_mcc_artifical_data(mcc:dict, trained_models_folder:str ):
-    ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
-    save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
-    mcc.to_csv(save_pandas_df)
+    mcc_baseline_test_median = np.median(np.array(mcc_baseline_test))
+    mcc_baseline_test_mean = np.mean(np.array(mcc_baseline_test))
+    mcc_baseline_test_std = np.std(np.array(mcc_baseline_test))
+    mcc_baseline_val_median = np.median(np.array(mcc_baseline_val))
+    mcc_baseline_val_mean = np.mean(np.array(mcc_baseline_val))
+    mcc_baseline_val_std = np.std(np.array(mcc_baseline_val))
 
-    g = sns.catplot(x="n_training_points", y="mcc_value",
-            hue="method", col="dimension",
-            data=mcc[mcc['data']=='test'], kind="box",
-            height=8, aspect=.7, dodge=False)
+    print(f"The baseline MCC over serveral cyclic permutations using {dim} components \n\
+                and method {method} \n\
+                on validation data is: {mcc_baseline_val_mean} +- {mcc_baseline_val_std} \
+                    with median at { mcc_baseline_val_median} \n\
+                on test data is: {mcc_baseline_test_mean} +- {mcc_baseline_test_std} \
+                    with median at { mcc_baseline_test_median}.")
 
-    g.fig.subplots_adjust(top=0.9) # adjust the Figure in rp
-    g.fig.suptitle('MCC value for different sizes of trainings artifical data with different methods. Create new data for each datasize.\n\
-                        Keep set for validation/testing constant. The number of classes in latent space is 5. \n')
-    plt.show()
-    plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
-    plt.close()
-
-
-
-def plot_mcc_emnist(mcc:dict, trained_models_folder:str ):
-    ''' take dictonary with mcc's and plot as boxplot + save as csv file.'''
-    save_pandas_df = os.path.join(trained_models_folder, 'all_mcc_file.csv')
-    mcc.to_csv(save_pandas_df)
-    
-    plt.figure(figsize=(10,6))
-    g = sns.boxplot(x="dimension", y="mcc_value", hue="method",
-            data=mcc[mcc['data']=='test'], dodge=False, palette="Set3")
-    plt.xlabel("final dimension", size=8)
-    plt.ylabel("MCC", size=8)
-    plt.title(f'MCC value for different final dimensions, training GLOW, using emnist data\n\
-                    with different methods to calculate MCC. \n\
-                    The number of clusters trained with in latent space is 40.', size=12)
-    plt.show()
-    plt.savefig( os.path.join(trained_models_folder, 'all_mcc_plot.pdf') )
-    plt.close()
+    return mcc_baseline_val_median, mcc_baseline_test_median
 
 
 def get_latent_space_samples(

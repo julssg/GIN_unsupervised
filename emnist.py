@@ -5,7 +5,8 @@ import torch
 from model import GIN
 from collections import OrderedDict
 # from evaluate import cca_evaluation, evaluate_stability, evaluate_stability_many_data
-from evaluate import mcc_evaluation, plot_mcc_emnist
+from evaluate import mcc_evaluation
+from plot import plot_mcc_emnist
 
 
 
